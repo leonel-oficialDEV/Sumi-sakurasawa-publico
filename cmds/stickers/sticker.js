@@ -24,7 +24,7 @@ export default {
       const name = user.name || '';
       const meta1 = user.metadatos ? String(user.metadatos).trim() : '';
       const meta2 = user.metadatos2 ? String(user.metadatos2).trim() : '';
-      const texto1 = meta1 || '𝓢𝓾𝓶𝓲 𝓢𝓪𝓴𝓾𝓻𝓪𝓼𝓪𝔀𝓪';
+      const texto1 = meta1 || 'sumi 🍭 bot';
       const texto2 = meta1 ? (meta2 || '') : `@${name}`;
       
       let urlArg = null; 
