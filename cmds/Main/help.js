@@ -58,7 +58,7 @@ export default {
       const sinPrefijo = /^(help|menu)$/i.test(usedPrefix)
       const cfg = botSettings.prefijo
       const prefix = sinPrefijo ? (Array.isArray(cfg) ? cfg[0] : typeof cfg === 'string' ? cfg : '') : usedPrefix
-      const link = 'https://api.evogb.org'
+      const link = 'https://chat.whatsapp.com/CC35aSwNsPsHYKkGsFE9Cp'
       const isOficialBot = botId === (global?.sock?.user?.id?.split(':')[0] + '@s.whatsapp.net')
       const botType = isOficialBot ? 'Owner' : 'Sub Bot'
       const platform = `${os.type()} ${os.release()} ${os.arch()}`
@@ -68,7 +68,7 @@ export default {
 
       let menu = `> *¡ʜᴏʟᴀ!* ${msg.pushName}, como está tu día?, mucho gusto mi nombre es *${namebot2}* ʚ♡⃛ɞ(ू•ᴗ•ू❁)*\n\n` +
       ` ⌒࣪᷼⏜͡ ۪ ࿚ꨪᰰ࿙ ࣭࣪⢏࣭۟⢢࣭ׄ᎐፝֟᎐࣭ׄ⡔࣭۟⡹࣭ׄ ࿚ꨪᰰ࿙ ۪ ͡⏜ׄ᷼⌒\n\n` +
-      `: ̗̀〄 *ᴅᴇᴠᴇʟᴏᴘᴇʀ ::* 𝐴𝑒𝑡ℎ𝑒𝑟 𝐿𝐴𝐵𝑆\n` +
+      `: ̗̀〄 *ᴅᴇᴠᴇʟᴏᴘᴇʀ ::*oculto\n` +
       `: ̗̀☕︎ *ᴏᴡɴᴇʀ ::* ${dev}\n` +
       `: ̗̀ꕥ *ᴛɪᴘᴏ ::* ${botType}\n` +
       `: ̗̀☄︎ *sɪsᴛᴇᴍᴀ/ᴏᴘʀ ::* ${platform}\n\n` +
