@@ -187,7 +187,7 @@ export default {
         stickerPack: {
           name: String(packName).slice(0, 35),
           publisher: String(publisherName).slice(0, 35),
-          description: '𝓢𝓾𝓶𝓲 𝓢𝓪𝓴𝓾𝓻𝓪𝓼𝓪𝔀𝓪',
+          description: 'sumi 🍭 bot',
           cover: stickerResults[0]?.sticker || null,
           stickers: stickerResults
         }
