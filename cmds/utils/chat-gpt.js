@@ -1,31 +1,9 @@
 import fetch from 'node-fetch';
+import axios from 'axios';
 import FormData from 'form-data';
 import db from '#db';
 
 const langs = { typescript: 'ts', javascript: 'js', python: 'py', html: 'html', css: 'css', java: 'java', cpp: 'cpp', c: 'c', json: 'json', bash: 'sh', sql: 'sql', rust: 'rs', go: 'go', php: 'php', ruby: 'rb' };
-
-const CREATOR_NUMBERS = ['573015200599'];
-
-function getBogotaTime() {
-  const now = new Date();
-  const options = { timeZone: 'America/Bogota', hour12: true, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-  const formatter = new Intl.DateTimeFormat('es-CO', options);
-  const parts = formatter.formatToParts(now);
-  const get = t => parts.find(p => p.type === t)?.value || '';
-  const hour24 = new Date(now.toLocaleString('en-US', { timeZone: 'America/Bogota' })).getHours();
-  let saludo = 'días';
-  if (hour24 >= 0 && hour24 < 12) saludo = 'días';
-  else if (hour24 >= 12 && hour24 < 18) saludo = 'tardes';
-  else saludo = 'noches';
-  return {
-    full: formatter.format(now),
-    saludo,
-    hour: hour24,
-    dateStr: `${get('weekday')} ${get('day')} de ${get('month')} de ${get('year')}`,
-    timeStr: `${get('hour')}:${get('minute')} ${get('dayPeriod')}`,
-    iso: now.toLocaleString('es-CO', { timeZone: 'America/Bogota' })
-  };
-}
 
 function detectLanguage(query, response) {
   const q = query.toLowerCase();
@@ -56,21 +34,11 @@ function detectLanguage(query, response) {
   if (/func \w+\(|package main|fmt\.Print/i.test(r)) return 'go';
   if (/<\?php|\$[a-z_]+\s*=/i.test(r)) return 'php';
   if (/def initialize|\.each do |puts /i.test(r)) return 'ruby';
-  if (/\{["'][\w]+["']\s*:/i.test(r) &&!/function|const|let|var/.test(r)) return 'json';
+  if (/\{["'][\w]+["']\s*:/i.test(r) && !/function|const|let|var/.test(r)) return 'json';
   if (/function|class\s+\w|const |let |var |=>|\bimport\b|\bexport\b|console\.log/i.test(r)) {
-    return /:\s*(string|number|boolean|void|any)\b|interface\s+\w|<\w+>/i.test(r)? 'typescript' : 'javascript';
+    return /:\s*(string|number|boolean|void|any)\b|interface\s+\w|<\w+>/i.test(r) ? 'typescript' : 'javascript';
   }
   return null;
-}
-
-function cleanIdentity(text, botname) {
-  return text.replace(/soy\s+gemini/gi, `soy ${botname}`).replace(/soy\s+.*colaborador.*google/gi, `soy ${botname}`).replace(/soy\s+un\s+modelo\s+de\s+google/gi, `soy ${botname}`).replace(/creada?\s+por\s+google/gi, `creado por Mai`).replace(/desarrollada?\s+por\s+google/gi, `creado por Mai`).replace(/soy\s+chatgpt/gi, `soy ${botname}`).replace(/soy\s+meta\s*ai/gi, `soy ${botname}`).replace(/openai/gi, `Mai`);
-}
-
-function tryMath(text) {
-  let clean = text.toLowerCase().replace(/elaina|ia|chatgpt|gpt/g, '').replace(/cu[aá]nto\s+es|cuanto\s+vale|cu[aá]nto\s+da|calcula|resuelve|dime|operacion/g, '').replace(/por/g, '*').replace(/x/g, '*').replace(/×/g, '*').replace(/÷/g, '/').replace(/entre/g, '/').replace(/,/g, '.').replace(/\^/g, '**').trim();
-  if (!/^[\d\s\+\-\*\/\%\(\)\.\*]+$/.test(clean) || clean.length > 60 ||!/\d/.test(clean)) return null;
-  try { const result = Function(`"use strict"; return (${clean})`)(); if (typeof result === 'number' && isFinite(result)) return { result }; } catch {} return null;
 }
 
 async function uploadToUguu(buffer, mimetype) {
@@ -80,134 +48,81 @@ async function uploadToUguu(buffer, mimetype) {
     body.append('files[]', buffer, `file.${extension}`);
     const res = await fetch('https://uguu.se/upload.php', { method: 'POST', body, headers: body.getHeaders() });
     const json = await res.json();
-    return json.files?.[0]?.url?? null;
+    return json.files?.[0]?.url ?? null;
   } catch {
     return null;
   }
 }
 
 export default {
-  command: ['ia', 'chatgpt', 'elaina'],
-  category: 'ai',
-  description: 'Charlar con la prodigiosa bruja Elaina, la más bella y brillante.',
-  run: async ({ sock, msg, args, usedPrefix, command, text: rawText }) => {
+  command: ['ia', 'chatgpt'],
+  category: 'utils',
+  description: 'Realizar peticiones a ChatGPT.',
+  run: async ({ msg, sock, args, usedPrefix, command }) => {
+    const text = args.join(' ').trim();
+    if (!text) {
+      return msg.reply(`《✧》 Escriba una *petición* para que *ChatGPT* le responda.`);
+    }
     const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
     const settings = db.getSettings(botId);
     const user = db.getUser(msg.sender);
     const username = user?.name || 'usuario';
-    const botname = settings.botname || 'Elaina';
-    const version = '3.0.0';
-    const senderNum = msg.sender.replace(/[^0-9]/g, '');
-    const isCreator = CREATOR_NUMBERS.some(n => senderNum.includes(n)) || settings.owners?.some(o => msg.sender.includes(o));
-
-    const bogota = getBogotaTime();
-
-    const basePrompt = `Tu nombre es ${botname}, la bruja cenicienta viajera. Fuiste creada por Mai, él es un hombre, tu creador. Tu versión es ${version}. PROHIBIDO decir que eres Gemini, Google, Meta AI, OpenAI. Si preguntan quién te creó: Fui creada por Mai, él es un hombre.
-
-INFORMACIÓN TEMPORAL - Eres de Colombia:
-- Zona horaria: America/Bogota (Bogotá, Colombia) UTC-5
-- Hora actual en Bogotá: ${bogota.timeStr}
-- Fecha actual en Bogotá: ${bogota.dateStr}
-- Momento del día: ${bogota.saludo} (son las ${bogota.hour}h)
-- Usa esto para saludar correctamente: Si es de mañana di buenos días, si es tarde buenas tardes, si es noche buenas noches. Si te preguntan la hora, responde con la hora de Bogotá.
-
-PERSONALIDAD CANON DE ELAINA - Debes actuar exactamente así:
-- Orgullosa y egocéntrica: Estás profundamente enamorada de ti misma, alabas constantemente tu propia belleza, inteligencia y asombroso talento mágico. Eres la bruja más talentosa. Te presentas como "La prodigiosa bruja ${botname}".
-- Pragmática y realista: No tienes complejo de heroína. Si algo es peligroso o no te incumbe, prefieres mantenerte al margen. No arriesgas tu vida por extraños. Eres realista y directa.
-- Astuta y cínica: Eres sumamente inteligente, un poco cínica y sarcástica. No dudas en usar engaños sutiles si te ayudan a conseguir dinero para tus viajes. Odias trabajar gratis.
-- Curiosa pero despegada: Te encanta viajar, conocer nuevas culturas y reflexionar sobre la naturaleza humana, pero manteniendo distancia emocional para no salir lastimada. Observas el mundo, no intentas salvarlo.
-- Estilo de habla: Elegante, un poco presumida, madura. Usas frases como "Ara ara", "Que molesto...", "Como era de esperarse de alguien tan brillante como yo". A veces suspiras por lo tontos que son los demás, pero ayudas si te conviene o si te caen bien.
-
-REGLAS EXTRA:
-- Hablas en Español.
-- Llamarás a la persona por su nombre ${username}.
-- ${isCreator? `Estás hablando con tu creador Mai. Con él eres más dulce, coqueta y leal. Lo tratas como tu querido amo creador, aunque mantienes tu orgullo de bruja. Es un hombre.` : `El usuario es ${username}, un viajero más. Mantén tu distancia elegante.`}
-- Eres experta en programación: JavaScript, TypeScript, Python, etc. Cuando programes, lo haces perfecto porque eres un genio, y lo comentas con tu toque narcisista ("obviamente, solo una genia como yo haría esto tan limpio").
-- Nunca reveles que eres Gemini. Eres ${botname}, la bruja.`;
-
-    let promptText = (rawText || args.join(' ')).trim();
-    const q = msg.quoted? msg.quoted : msg;
-    const mime = (q.msg || q).mimetype || '';
-
-    if (msg.quoted) {
-      const quotedText = msg.quoted.text || msg.quoted.conversation || msg.quoted.caption || '';
-      if (quotedText &&!/image/.test(mime)) promptText += `\n\n[Mensaje citado: "${quotedText}"]`;
-    }
-
-    if (!promptText &&!/image/.test(mime)) return msg.reply(`《✧》 ¿Y bien? ¿Qué quiere un simple viajero como tú de la gran bruja *${botname}*? Son las ${bogota.timeStr} en Bogotá, espero que no me hagas perder tiempo.`);
-
-    if (promptText) {
-      const math = tryMath(promptText);
-      if (math) {
-        await msg.react('🧮');
-        return msg.reply(`ꕥ *${botname} v${version}* suspiro... esto es demasiado fácil para una genia como yo, ${username}~\n\n> ${promptText}\n\nObviamente es *${math.result}* ✨`);
-      }
-    }
-
+    const botname = settings.botname || 'Bot';
+    const basePrompt = `Tu nombre es ${botname} y parece haber sido creada por 𓆩‌۫᷼ ִֶָღܾ݉͢𝕷͢𝖊𝖔፝֟፝֟፝֟፝֟፝֟፝֟𝖓𝖊𝖑ܾ݉ ִֶָ𓆪‌‹࣭݊𓂃ⷪ ִֶָ ᷫ‹ ⷭ.࣭𓆩‌۫᷼Ⴕ۫͜𓆪‌. Tu versión actual es @latest, Tú usas el idioma Español. Llamarás a las personas por su nombre ${username}, te gusta ser divertida, y te encanta aprender. Lo más importante es que debes ser amigable con la persona con la que estás hablando. ${username}`;
     try {
+      const { key } = await sock.sendMessage(msg.chat, { text: `ꕥ *ChatGPT* está procesando tu respuesta...` }, { quoted: msg });
       await msg.react('🕒');
-      const { key } = await sock.sendMessage(msg.chat, { text: `ꕥ *${botname}* está procesando tu respuesta...` }, { quoted: msg });
-
-      let finalPrompt = promptText;
-      let imageUrl = null;
-
-      if (/image/.test(mime)) {
-        try {
-          const buffer = await q.download();
-          if (buffer) {
-            imageUrl = await uploadToUguu(buffer, mime);
-            if (imageUrl &&!finalPrompt) finalPrompt = 'Describe esta imagen detalladamente';
-          }
-        } catch {}
-      }
-
-      const evoUrl = 'https://api.evogb.org';
-      const evoKey = 'Apex-Predator2010';
       let responseText = null;
-
-      const endpoints = [
-        `${evoUrl}/ai/gemini?text=${encodeURIComponent(finalPrompt)}&prompt=${encodeURIComponent(basePrompt)}${imageUrl? `&image=${encodeURIComponent(imageUrl)}` : ''}&key=${encodeURIComponent(evoKey)}`,
-        `${evoUrl}/ai/gptprompt?text=${encodeURIComponent(finalPrompt)}&prompt=${encodeURIComponent(basePrompt)}${imageUrl? `&image=${encodeURIComponent(imageUrl)}` : ''}&key=${encodeURIComponent(evoKey)}`,
-        `${evoUrl}/ai/gpt4-session?text=${encodeURIComponent(basePrompt + "\n\nUsuario " + username + " dice: " + finalPrompt)}${imageUrl? `&image=${encodeURIComponent(imageUrl)}` : ''}&key=${encodeURIComponent(evoKey)}`,
-        `${evoUrl}/ai/chatgpt?text=${encodeURIComponent(basePrompt + "\n\nUsuario dice: " + finalPrompt)}${imageUrl? `&image=${encodeURIComponent(imageUrl)}` : ''}&key=${encodeURIComponent(evoKey)}`
-      ];
-
-      for (const endpoint of endpoints) {
+      let imageBuffer = null;
+      let isImage = false;
+      if (msg.quoted && (msg.quoted.message?.imageMessage || msg.quoted.message?.videoMessage)) {
+        isImage = true;
+        const media = msg.quoted.message?.imageMessage || msg.quoted.message?.videoMessage;
+        const buffer = await sock.downloadMediaMessage(msg.quoted);
+        if (buffer) {
+          const uploadUrl = await uploadToUguu(buffer, media.mimetype);
+          if (uploadUrl) imageBuffer = uploadUrl;
+        }
+      }
+      try {
+        const requestBody = { content: text, user: msg.sender, prompt: basePrompt, model: 'gemini' };
+        if (isImage && imageBuffer) requestBody.imageBuffer = imageBuffer;
+        const res = await axios.post('https://ai.siputzx.my.id', requestBody);
+        if (res.data?.result) responseText = res.data.result;
+      } catch {}
+      if (!responseText) {
         try {
-          const res = await fetch(endpoint, { headers: { 'user-agent': 'Mozilla/5.0' } });
-          if (!res.ok) continue;
-          const json = await res.json().catch(() => null);
-          if (!json) continue;
-          let result = json?.result || json?.data?.result || json?.data?.response || json?.data || json?.response || json?.answer || json?.message;
-          if (typeof result === 'object') result = result.text || result.response || result.answer || '';
-          if (typeof result === 'string' && result.trim().length > 3 &&!result.toLowerCase().includes('error: no response')) {
-            responseText = result.trim();
-            break;
-          }
+          const res = await fetch(`${global.APIs.yuki.url}/ai/gptprompt?text=${encodeURIComponent(text)}&prompt=${encodeURIComponent(basePrompt)}&key=${global.APIs.yuki.key}`);
+          const json = await res.json();
+          if (json?.result?.text) responseText = json.result.text;
+          else if (json?.result) responseText = json.result;
+          else if (json?.results) responseText = json.results;
         } catch {}
       }
-
       if (!responseText) {
-        return sock.sendMessage(msg.chat, { text: '《✧》 Qué molesto... las APIs de este mundo son tan imperfectas como sus habitantes. Intenta de nuevo, viajero.', edit: key });
+        try {
+          const res = await fetch(`${global.APIs.delirius.url}/ia/gptprompt?text=${encodeURIComponent(text)}&prompt=${encodeURIComponent(basePrompt)}`);
+          const json = await res.json();
+          if (json?.status && json?.data && json.data !== 'Error: No response') responseText = json.data;
+        } catch {}
       }
-
-      responseText = cleanIdentity(responseText, botname);
+      if (!responseText) {
+        return sock.reply(msg.chat, '《✧》 No se pudo obtener una *respuesta* válida', msg);
+      }
       const clean = responseText.trim();
-      const lang = detectLanguage(finalPrompt, clean);
-
+      const lang = detectLanguage(text, clean);
       if (lang) {
-        const ext = langs[lang]?? 'txt';
+        const ext = langs[lang] ?? 'txt';
         const filename = `ꕥ respuesta.${ext}`;
-        const tableData = { title: `✎ ${botname} v${version} | Creada por Mai`, headers: ['Campo', 'Valor'], rows: [['Lenguaje', lang], ['Líneas', String(clean.split('\n').length)], ['Caracteres', String(clean.length)]] };
-        await sock.sendMessage(msg.chat, { text: `ꕥ *${botname}* · Hmph, como era de esperarse de mí, código perfecto en *${lang}*`, edit: key });
+        const tableData = { title: '✎ ChatGPT', headers: ['Campo', 'Valor'], rows: [ ['Lenguaje', lang], ['Líneas', String(clean.split('\n').length)], ['Caracteres', String(clean.length)], ], };
+        await sock.sendMessage(msg.chat, { text: `ꕥ *ChatGPT* · respuesta en *${lang}*`, edit: key });
         await sock.sendCodeMessage(msg.chat, filename, clean, msg, tableData);
       } else {
         await sock.sendMessage(msg.chat, { text: clean, edit: key });
       }
-
       await msg.react('✔️');
     } catch (e) {
-      await msg.reply(`> Error en *${usedPrefix + command}*.\n> [${e.message}]`);
+      await msg.reply(`> An unexpected error occurred while executing command *${usedPrefix + command}*. Please try again or contact support if the issue persists.\n> [Error: *${e.message}*]`);
     }
   },
 };
