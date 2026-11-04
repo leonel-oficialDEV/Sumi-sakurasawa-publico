@@ -1,148 +1,109 @@
-import db from "#db"
-import { promises as fs } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import db from "#db";
+import { listSessions } from '#subs';
 
-const filename = fileURLToPath(import.meta.url);
-const dirname = path.dirname(filename);
+const PAGE_SIZE = 30;
+
+const cleanJid = (jid = '') => String(jid).split('@')[0].split(':')[0];
+const toPn = (jid) => {
+  const n = cleanJid(jid);
+  return n ? n + '@s.whatsapp.net' : '';
+};
+
+const getSafeSettings = (jid) => {
+  try {
+    return db.getSettings(jid) || {};
+  } catch {
+    return {};
+  }
+};
 
 export default {
   command: ['bots', 'sockets'],
   category: 'socket',
-  description: 'mira las sesiones y sockets activos en el grupo', 
+  description: 'mira las sesiones y sockets activos en el grupo',
   isAdmin: true,
-  run: async ({ msg, sock, isStaff, isOwner, isDev }) => {
-    const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-    const mainBotJid = global?.sock ? global?.sock?.user?.id?.split(':')[0] + '@s.whatsapp.net' : '';
+  run: async ({ msg, sock, args, isStaff, isOwner, isDev }) => {
+    const botId = toPn(sock.user?.id);
+    const mainBotJid = toPn(global.sock?.user?.id);
+    const isPrivileged = isStaff || isOwner || isDev;
 
-    const from = msg.key.remoteJid;
-    const groupMetadata = msg.isGroup ? await sock.groupMetadata(from).catch(() => {}) : '';
-    const groupParticipants = groupMetadata?.participants?.map((p) => p.phoneNumber || p.jid || p.lid || p.id) || [];
-
-    const isMainBotInGroup = mainBotJid ? groupParticipants.includes(mainBotJid) : false;
-
-    const basePath = path.join(dirname, '../../Sessions');
-    
-    // Lectura asíncrona eficiente del directorio de Subs
-    const getBotsFromFolder = async () => {
-      const folderPath = path.join(basePath, 'Subs');
-      try {
-        const stats = await fs.stat(folderPath).catch(() => null);
-        if (!stats || !stats.isDirectory()) return [];
-        const dirs = await fs.readdir(folderPath);
-        
-        const checks = await Promise.all(
-          dirs.map(async (dir) => {
-            const credsPath = path.join(folderPath, dir, 'creds.json');
-            try {
-              const fileStats = await fs.stat(credsPath);
-              return fileStats.isFile() ? dir.replace(/\D/g, '') : null;
-            } catch {
-              return null;
-            }
-          })
-        );
-        return checks.filter(Boolean);
-      } catch {
-        return [];
-      }
-    };
-
-    const subs = await getBotsFromFolder();
-    const categorizedBots = { Owner: [], Sub: [] };
-    const mentionedJid = [];
-
-    // Función segura para obtener configuraciones de forma síncrona
-    const getSafeSettings = (jid) => {
-      try {
-        return db.getSettings(jid) || {};
-      } catch {
-        return {};
-      }
-    };
-
-    // Función unificada para procesar bots
-    const processBot = (jid, label, checkGroup = true) => {
-      if (!jid) return null;
-      if (checkGroup && !groupParticipants.includes(jid)) return null;
-      
-      if (!mentionedJid.includes(jid)) mentionedJid.push(jid);
-      
-      const data = getSafeSettings(jid);
-      const name = data?.namebot2 || 'Bot';
-      const number = jid.split('@')[0];
-      
-      return {
-        jid,
-        line: `- [${label} *${name}*] › @${number}`
-      };
-    };
-
-    // Procesar Main Bot / Owner
-    if (mainBotJid) {
-      const mainData = getSafeSettings(mainBotJid);
-      if (mainData) {
-        const mainBotInfo = processBot(mainBotJid, 'Owner', true);
-        if (mainBotInfo && isMainBotInGroup) {
-          categorizedBots.Owner.push(mainBotInfo.line);
+    const groupIds = new Set();
+    if (msg.isGroup) {
+      const meta = await sock.groupMetadata(msg.chat).catch(() => null);
+      for (const p of meta?.participants || []) {
+        for (const v of [p.phoneNumber, p.jid, p.lid, p.id]) {
+          if (typeof v === 'string' && v) groupIds.add(v.replace(/:\d+@/, '@'));
         }
       }
     }
 
-    // Procesar Subs
-    for (const num of subs) {
-      const jid = num + '@s.whatsapp.net';
-      const res = processBot(jid, 'Sub', true);
-      if (res) categorizedBots.Sub.push(res.line);
+    const subNumbers = listSessions()
+      .filter((s) => s.registered && !global.SUBS_STOPPED?.has(s.id))
+      .map((s) => s.id.replace(/\D/g, ''))
+      .filter((n) => n && n + '@s.whatsapp.net' !== mainBotJid);
+
+    const bots = [];
+    if (mainBotJid) bots.push({ jid: mainBotJid, label: 'Owner' });
+    for (const n of subNumbers) bots.push({ jid: n + '@s.whatsapp.net', label: 'Sub' });
+    for (const b of bots) b.inGroup = groupIds.has(b.jid);
+
+    const inGroupList = msg.isGroup ? bots.filter((b) => b.inGroup) : [];
+
+    const biggest = Math.max(inGroupList.length, isPrivileged ? bots.length : 0);
+    const totalPages = Math.max(1, Math.ceil(biggest / PAGE_SIZE));
+    const page = Math.max(1, parseInt(args?.[0], 10) || 1);
+
+    if (page > totalPages) {
+      return sock.sendMessage(
+        msg.chat,
+        { text: `✎ Esa página no existe. Hay *${totalPages}* página${totalPages > 1 ? 's' : ''}.` },
+        { quoted: msg },
+      );
     }
 
-    const totalBots = 1 + subs.length;
-    const totalInGroup = categorizedBots.Owner.length + categorizedBots.Sub.length;
+    const start = (page - 1) * PAGE_SIZE;
+    const mentionedJid = new Set();
 
-    let message = `ꕥ Números de Sockets activos *(${totalBots})*\n\n`;
-    message += `ੈ❖‧₊˚ Principales › *1*\n`;
-    message += `ੈ✿‧₊˚ Subs › *${subs.length}*\n\n`;
-    message += `➭ *Bots en el grupo ›* ${totalInGroup}\n`;
+    const renderLines = (list) => list.slice(start, start + PAGE_SIZE).map((b, i) => {
+      const name = getSafeSettings(b.jid).namebot2 || 'Bot';
+      if (b.inGroup) mentionedJid.add(b.jid);
+      return `${start + i + 1}. [${b.label} *${name}*] › ${b.inGroup ? '@' : ''}${b.jid.split('@')[0]}`;
+    });
 
-    for (const cat of ['Owner', 'Sub']) {
-      if (categorizedBots[cat].length) message += categorizedBots[cat].join('\n') + '\n';
+    let message = `ꕥ Números de Sockets activos *(${bots.length})*\n\n`;
+    message += `ੈ❖‧₊˚ Principales › *${mainBotJid ? 1 : 0}*\n`;
+    message += `ੈ✿‧₊˚ Subs › *${subNumbers.length}*\n\n`;
+
+    if (msg.isGroup) {
+      message += `➭ *Bots en el grupo ›* ${inGroupList.length}\n`;
+      const lines = renderLines(inGroupList);
+      if (lines.length) message += lines.join('\n') + '\n';
     }
 
-    // Listado global para Staff / Owner / Dev
-    if (isStaff || isOwner || isDev) {
-      const allBotsList = [];
-
-      if (mainBotJid) {
-        const res = processBot(mainBotJid, 'Owner', false);
-        if (res) allBotsList.push(res.line);
-      }
-
-      for (const num of subs) {
-        const jid = num + '@s.whatsapp.net';
-        const res = processBot(jid, 'Sub', false);
-        if (res) allBotsList.push(res.line);
-      }
-
-      if (allBotsList.length) {
-        message += `\n➭ *TOTAL BOTS ›* ${allBotsList.length}\n`;
-        message += allBotsList.join('\n') + '\n';
-      }
+    if (isPrivileged && bots.length) {
+      message += `\n➭ *TOTAL BOTS ›* ${bots.length}\n`;
+      const lines = renderLines(bots);
+      if (lines.length) message += lines.join('\n') + '\n';
     }
 
-    const currentBotData = getSafeSettings(botId);
-    const icon = currentBotData?.icon || currentBotData?.banner || '';
+    if (totalPages > 1) {
+      message += `\n❖ Página *${page}/${totalPages}*`;
+      if (page < totalPages) message += ` › usa *#bots ${page + 1}* para ver más`;
+      message += '\n';
+    }
+
+    const text = message.trim();
+    const contextInfo = { mentionedJid: [...mentionedJid] };
+
+    const data = getSafeSettings(botId);
+    const icon = data.icon || data.banner || '';
 
     if (icon) {
-      await sock.sendMessage(msg.chat, {
-        image: { url: icon },
-        caption: message.trim(),
-        contextInfo: { mentionedJid }
-      }, { quoted: msg });
-    } else {
-      await sock.sendMessage(msg.chat, {
-        text: message.trim(),
-        contextInfo: { mentionedJid }
-      }, { quoted: msg });
+      try {
+        await sock.sendMessage(msg.chat, { image: { url: icon }, caption: text, contextInfo }, { quoted: msg });
+        return;
+      } catch {}
     }
+    await sock.sendMessage(msg.chat, { text, contextInfo }, { quoted: msg });
   },
 };
