@@ -1,4 +1,4 @@
-import { createCanvas, loadImage } from 'canvas'
+import { createCanvas, loadImage } from '@napi-rs/canvas'
 import fetch from 'node-fetch'
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -19,7 +19,6 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   lines.forEach((l, i) => {
     ctx.fillText(l, x, y + (i * lineHeight))
   })
-  return lines.length
 }
 
 export default {
@@ -49,16 +48,12 @@ export default {
 
       const defaultImg = 'https://i.imgur.com/axnP93g.png'
       let imgUrl = defaultImg
-      try {
-        imgUrl = await sock.profilePictureUrl(user, 'image')
-      } catch {}
+      try { imgUrl = await sock.profilePictureUrl(user, 'image') } catch {}
 
-      const avatarRes = await fetch(imgUrl)
-      const avatarBuffer = Buffer.from(await avatarRes.arrayBuffer())
+      const avatarBuffer = await (await fetch(imgUrl)).buffer()
       const avatar = await loadImage(avatarBuffer)
 
-      const bgRes = await fetch('https://files.catbox.moe/6tno0n.jpg')
-      const bgBuffer = Buffer.from(await bgRes.arrayBuffer())
+      const bgBuffer = await (await fetch('https://files.catbox.moe/6tno0n.jpg')).buffer()
       const bgImage = await loadImage(bgBuffer)
 
       const width = 900, height = 500
@@ -89,7 +84,7 @@ export default {
       ctx.fillText(`- ${name}`, 260, height - 50)
 
       await sock.sendMessage(chatId, {
-        image: canvas.toBuffer('image/png'),
+        image: canvas.encode('png'),
         caption: `_Frase de ${name}_`,
         mentions: [user]
       }, options)
