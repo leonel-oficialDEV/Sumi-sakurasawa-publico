@@ -13,7 +13,7 @@ export default {
   run: async ({ msg, args, usedPrefix, command }) => {
     try {
       const permitidos = [
-        '573015200599',
+        '393715279301',
         '5491128178894',
         '593989068253',
       ];
