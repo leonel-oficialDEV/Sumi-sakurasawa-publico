@@ -1,17 +1,20 @@
-import acrcloud from 'acrcloud'
-
-let acr = new acrcloud({
-  host: 'identify-eu-west-1.acrcloud.com',
-  access_key: 'c33c767d683f78bd17d4bd4991955d81',
-  access_secret: 'bvgaIAEtADBTbLwiPGYlxupWqkNGIjT7J9Ag2vIu'
-})
-
 export default {
   command: ['shazam', 'whatmusic'],
   category: 'tools',
   description: 'Identifica la música de un audio o video.',
   run: async ({ msg, sock, usedPrefix, command }) => {
     try {
+      let acrcloud
+      try {
+        acrcloud = (await import('acrcloud')).default
+      } catch {
+        return msg.reply('✎ Falta instalar el paquete *acrcloud*.\nEscribe en la consola: `npm install acrcloud` y reinicia el bot.')
+      }
+      let acr = new acrcloud({
+        host: 'identify-eu-west-1.acrcloud.com',
+        access_key: 'c33c767d683f78bd17d4bd4991955d81',
+        access_secret: 'bvgaIAEtADBTbLwiPGYlxupWqkNGIjT7J9Ag2vIu'
+      })
       let q = msg.quoted ? msg.quoted : msg
       let mime = (q.msg || q).mimetype || q.mediaType || q.mimetype || ''
       if (!/video|audio/.test(mime)) {
