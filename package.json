@@ -67,7 +67,8 @@
     "pg": "^8.11.3",
     "@ffmpeg-installer/ffmpeg": "latest",
     "ytdl-core": "^4.11.5",
-    "@napi-rs/canvas": "^0.1.65"
+    "@napi-rs/canvas": "^0.1.65",
+    "acrcloud": "^1.4.0"
   },
   "allowScripts": {
     "protobufjs@7.6.6": true
