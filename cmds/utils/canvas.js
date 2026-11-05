@@ -28,23 +28,17 @@ export default {
   run: async ({ msg, sock, text, usedPrefix, command }) => {
     const frase = text || (msg.quoted?.text || '')
     if (!frase) return sock.sendMessage(msg.chat, { text: `*Uso:* ${usedPrefix + command} <frase o etiqueta un mensaje>` }, { quoted: msg })
-
     const user = msg.quoted?.sender || msg.sender
     const name = await sock.getName(user).catch(() => msg.pushName || 'Usuario')
-
     const defaultImg = 'https://i.imgur.com/axnP93g.png'
     const imgUrl = await sock.profilePictureUrl(user, 'image').catch(() => defaultImg)
-
     let avatar
     try { avatar = await loadImage(imgUrl) } catch { avatar = await loadImage(defaultImg) }
-
     let bgImage
     try { bgImage = await loadImage('https://files.catbox.moe/6tno0n.jpg') } catch { bgImage = null }
-
     const width = 900, height = 500
     const canvas = createCanvas(width, height)
     const ctx = canvas.getContext('2d')
-
     if (bgImage) {
       ctx.drawImage(bgImage, 0, 0, width, height)
     } else {
@@ -53,7 +47,6 @@ export default {
     }
     ctx.fillStyle = 'rgba(0,0,0,0.5)'
     ctx.fillRect(0, 0, width, height)
-
     const avatarSize = 100
     ctx.save()
     ctx.beginPath()
@@ -62,17 +55,13 @@ export default {
     ctx.clip()
     ctx.drawImage(avatar, 100, height - 140, avatarSize, avatarSize)
     ctx.restore()
-
     ctx.fillStyle = '#ffffff'
     ctx.font = '28px sans-serif'
     wrapText(ctx, `"${frase}"`, 260, 100, 600, 36)
-
     ctx.fillStyle = '#dddddd'
     ctx.font = '20px sans-serif'
     ctx.fillText(`- ${name}`, 260, height - 50)
-
     const buf = await canvas.encode('png')
-
     await sock.sendMessage(msg.chat, {
       image: buf,
       caption: `_Frase de ${name}_`,
