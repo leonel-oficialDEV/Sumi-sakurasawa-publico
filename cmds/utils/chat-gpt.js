@@ -191,7 +191,7 @@ function identityResponse(text, isOwner, isDeveloper) {
     }
 
     if (isDeveloper) {
-      return 'ꕥ El bot fue desarrollado p'
+      return 'ꕥ El bot fue desarrollado por el equipo de Sumi Sakurasawa. Leonel es mi creador.'
     }
 
     return 'ꕥ Eres la persona con la que estoy conversando. Mi creador es Leonel; no voy a confundirte con él.'
@@ -352,7 +352,7 @@ export default {
       if (!answer) {
         const pending = await sock.sendMessage(
           msg.chat,
-          { text: `ꕥ Ehm… déjame leerlo con ca` },
+          { text: `ꕥ Ehm… déjame leerlo con calma, quiero responderte bien… (｡•́‿•̀｡)` },
           { quoted: msg }
         )
 
