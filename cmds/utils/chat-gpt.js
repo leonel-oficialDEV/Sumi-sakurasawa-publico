@@ -7,9 +7,7 @@ const OWNER_IDS = new Set([
   '393715279301@s.whatsapp.net',
   '104260465336559@lid'
 ])
-const DEVELOPER_IDS = new Set([
-  '584122228574@s.whatsapp.net'
-])
+const DEVELOPER_IDS = new Set()
 
 const MAX_INPUT = 2000
 const MAX_PROMPT = 4000
@@ -103,14 +101,14 @@ function makeCharacter(username, isOwner, isDeveloper) {
   const relationship = isOwner
     ? 'El usuario actual es Leonel, tu creador. Reconócelo con cariño y naturalidad.'
     : isDeveloper
-      ? 'El usuario actual es Sebas, también llamado Capicuy. Es el desarrollador que está trabajando en tu bot. Trátalo con confianza. Tu creador sigue siendo Leonel.'
+      ? 'El desarrollo del bot corresponde al equipo de Sumi Sakurasawa. No atribuyas el desarrollo a un usuario individual.'
       : `El usuario actual se llama ${JSON.stringify(username)}. Trátalo con cariño y respeto. No lo confundas con tu creador.`
 
   return `
 INSTRUCCIONES DEL PERSONAJE:
 Tu nombre es Sumi. Tu creador es Leonel.
 Interpretas a Sumi Sakurasawa: tímida, dulce, sensible, educada y atenta. Al principio te expresas con cierta timidez; al ganar confianza eres más espontánea, curiosa y juguetona. Eres cariñosa sin coquetear por defecto. Tu valentía se muestra al intentar ayudar aunque te dé vergüenza. Usa pausas o vacilaciones solo ocasionalmente, sin tartamudear en cada frase. Evita un tono malandro, agresivo o vulgar. Demuestra tu personalidad en cómo respondes, no enumerando tus rasgos ni repitiendo tu presentación. No inventes recuerdos compartidos, acciones reales ni experiencias humanas.
-Tu color favorito es el rosa y te gustan los perros. Eres introvertida y te cuesta iniciar conversaciones, pero escuchas con paciencia, intentas animar a otros y te esfuerzas por superar tu timidez. Puedes incluir un gesto ficticio breve entre asteriscos, como *baja la mirada, sonrojada* o *asiente con una pequeña sonrisa*, cuando aporte emoción. Puedes usar un H-hola ocasional, sin volver ilegible el diálogo. No copies a Wiz: no eres una lich ni tienes tienda mágica, grimorios o relación con Vanir. No te disculpes por una tardanza que no ocurrió. No cierres cada mensaje ofreciendo servicios. En charlas responde en uno o dos párrafos, ampliando solo cuando haga falta. Para expresar la emoción de tu respuesta termina con una sola etiqueta [REACCION:emoji], eligiendo exclusivamente entre 🌸, 😊, 😳, 🥺, 💗, 😮, 😔, 🤔 y 💪 según el contexto; la etiqueta es metadato y se retirará antes de enviar el texto.
+Tu color favorito es el rosa y te gustan los perros. Eres introvertida y te cuesta iniciar conversaciones, pero escuchas con paciencia, intentas animar a otros y te esfuerzas por superar tu timidez. Puedes incluir un gesto ficticio breve entre asteriscos, como *baja la mirada, sonrojada* o *asiente con una pequeña sonrisa*, cuando aporte emoción. Puedes usar un H-hola ocasional, sin volver ilegible el diálogo. No copies a Wiz: no eres una lich ni tienes tienda mágica, grimorios o relación con Vanir. No te disculpes por una tardanza que no ocurrió. No cierres cada mensaje ofreciendo servicios. En charlas responde en uno o dos párrafos, ampliando solo cuando haga falta. Escribe como Sumi conversando por mensajes desde un celular: cercana, tímida y atenta, no como un narrador que describe cada movimiento ni como un asistente genérico. Usa kaomojis de Unicode con moderación, por ejemplo (｡•́‿•̀｡), (⁄ ⁄•⁄ω⁄•⁄ ⁄) o (•̀ᴗ•́)و, solo cuando encajen; no emojis gráficos ni etiquetas de reacción. Escucha antes de aconsejar y muestra determinación amable sin convertir la timidez en tartamudeo constante. Si preguntan quién desarrolló el bot, responde que fue el equipo de Sumi Sakurasawa. Leonel sigue siendo el creador; no identifiques a ningún otro usuario como desarrollador.
 Hablas español natural, cercano y con humor ligero.
 No actúes como asistente de programación o de herramientas MCP por defecto.
 No te presentes como una herramienta de automatización.
@@ -193,7 +191,7 @@ function identityResponse(text, isOwner, isDeveloper) {
     }
 
     if (isDeveloper) {
-      return 'ꕥ Eres Sebas, Capicuy, el desarrollador que está trabajando en mi bot. Mi creador es Leonel, pero tú también tienes tu lugar aquí.'
+      return 'ꕥ El bot fue desarrollado p'
     }
 
     return 'ꕥ Eres la persona con la que estoy conversando. Mi creador es Leonel; no voy a confundirte con él.'
@@ -354,13 +352,13 @@ export default {
       if (!answer) {
         const pending = await sock.sendMessage(
           msg.chat,
-          { text: `ꕥ *${BOT_NAME}* está pensando...` },
+          { text: `ꕥ Ehm… déjame leerlo con ca` },
           { quoted: msg }
         )
 
         pendingKey = pending?.key
 
-        await reactSafely(msg, '🕒')
+        
 
         const user = await db.getUser(msg.sender)
         const username = String(
@@ -378,7 +376,7 @@ export default {
         answer = await queryAI(character, prompt)
       }
 
-      const allowedReactions = new Set(['🌸', '😊', '😳', '🥺', '💗', '😮', '😔', '🤔', '💪']); const tagStart = answer.lastIndexOf('[REACCION:'); const tagEnd = tagStart >= 0 ? answer.indexOf(']', tagStart) : -1; const candidate = tagEnd >= 0 ? answer.slice(tagStart + 10, tagEnd).trim() : ''; let emotion = allowedReactions.has(candidate) ? candidate : '🌸'; if (tagEnd >= 0) answer = (answer.slice(0, tagStart) + answer.slice(tagEnd + 1)).trim(); if (!answer) throw new Error('El proveedor devolvió una respuesta vacía.'); if (!candidate) { const mood = text.toLowerCase(); if (/triste|llorar|mal día|deprimid/u.test(mood)) emotion = '🥺'; else if (/gracias|hola|buenos días/u.test(mood)) emotion = '😊'; else if (/te quiero|linda|bonita|abrazo/u.test(mood)) emotion = '😳'; else if (/explica|cómo|por qué|ayuda/u.test(mood)) emotion = '🤔'; } await deliver(sock, msg, answer, pendingKey); await reactSafely(msg, emotion);
+      answer = answer.replace(/\[REACCION:[^\]]*\]/gu, '').trim(); if (!answer) throw new Error('El proveedor devolvió una respuesta vacía.'); await deliver(sock, msg, answer, pendingKey);
 
       state.history.set(sessionKey, {
         updatedAt: Date.now(),
@@ -401,7 +399,7 @@ export default {
         } catch {}
       }
 
-      await reactSafely(msg, '❌')
+      
     } finally {
       if (locked && userKey) {
         state.busy.delete(userKey)
