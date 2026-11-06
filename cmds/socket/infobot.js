@@ -1,5 +1,4 @@
 import db from "#db"
-import { prepareWAMessageMedia } from 'baileys'
 import os from 'os'
 
 function rTime(seconds) {
@@ -73,26 +72,16 @@ export default {
       const isVideo = /\.(mp4|gif|webm)$/i.test(banner)
       const ctx = { mentionedJid: [owner, msg.sender].filter(Boolean), isForwarded: false }
 
-      if (isVideo) {
-        await sock.sendMessage(msg.chat, { video: { url: banner }, caption: menu, contextInfo: ctx }, { quoted: msg })
-      } else {
-        let preview = undefined
-        if (banner) {
-          try {
-            const m = await prepareWAMessageMedia({ image: { url: banner } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' })
-            preview = {
-              'canonical-url': link,
-              'matched-text': link,
-              title: namebot,
-              description: `${namebot2}, Built With 💜 By 𝐴𝑒𝑡ℎ𝑒𝑟 𝐿𝐴𝐵𝑆`,
-              jpegThumbnail: m.imageMessage?.jpegThumbnail ? Buffer.from(m.imageMessage.jpegThumbnail) : undefined,
-              highQualityThumbnail: m.imageMessage || undefined
-            }
-          } catch (err) {
-            console.error('[INFOBOT BANNER ERROR]', err)
-          }
+      try {
+        if (!banner) throw new Error('No banner')
+        if (isVideo) {
+          await sock.sendMessage(msg.chat, { video: { url: banner }, caption: menu, contextInfo: ctx }, { quoted: msg })
+        } else {
+          await sock.sendMessage(msg.chat, { image: { url: banner }, caption: menu, contextInfo: ctx }, { quoted: msg })
         }
-        await sock.sendMessage(msg.chat, { text: menu, linkPreview: preview, contextInfo: ctx }, { quoted: msg })
+      } catch (err) {
+        console.error('[INFOBOT BANNER ERROR]', err)
+        await sock.sendMessage(msg.chat, { text: menu, linkPreview: false, contextInfo: ctx }, { quoted: msg })
       }
     } catch (e) {
       console.error('[INFOBOT ERROR]', e)
