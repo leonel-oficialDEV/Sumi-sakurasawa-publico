@@ -1,4 +1,4 @@
-import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
+import { sendChannelMessage } from '../../lib/channel.js'
 import yts from 'yt-search'
 import axios from 'axios'
 import { getBuffer } from '#serialize'

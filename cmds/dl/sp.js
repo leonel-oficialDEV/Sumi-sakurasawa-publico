@@ -1,4 +1,4 @@
-import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
+import { sendChannelMessage } from '../../lib/channel.js'
 import db from "#db"
 import fetch from 'node-fetch'
 import { getBuffer } from "#serialize"

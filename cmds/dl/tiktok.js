@@ -1,4 +1,4 @@
-import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
+import { sendChannelMessage } from '../../lib/channel.js'
 import fetch from 'node-fetch'
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0'
@@ -171,7 +171,7 @@ export default {
         if (data.type === 'image') {
           if (!data.images.length) return msg.reply('[!] Enlace invalido o sin contenido descargable.')
           const medias = data.images.slice(0, 10).map((u, i) => ({ type: 'image', data: { url: u }, caption: i === 0 ? caption : '' }))
-          await sendChannelAlbum(sock, msg.chat, medias, { quoted: msg })
+          await sock.sendAlbumMessage(msg.chat, medias, { quoted: msg })
           if (data.music) {
             await sendChannelMessage(sock, msg.chat, { audio: { url: data.music }, mimetype: 'audio/mp4', fileName: 'tiktok_audio.mp4' }, { quoted: msg })
           }
@@ -209,7 +209,7 @@ export default {
       if (medias.length === 1) {
         await sendChannelMessage(sock, msg.chat, { video: medias[0].data, caption: medias[0].caption }, { quoted: msg })
       } else {
-        await sendChannelAlbum(sock, msg.chat, medias, { quoted: msg })
+        await sock.sendAlbumMessage(msg.chat, medias, { quoted: msg })
       }
     } catch (e) {
       await msg.reply(`> Ocurrio un error al ejecutar el comando *${usedPrefix + command}*. Intenta de nuevo o contacta a soporte si el problema persiste.\n> [Error: *${e.message}*]`)
