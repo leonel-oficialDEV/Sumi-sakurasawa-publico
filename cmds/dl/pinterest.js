@@ -22,6 +22,7 @@ export default {
     const vredenUrl = global.APIs?.vreden?.url
 
     try {
+      await sock.sendMessage(msg.chat, { text: '《✧》 Buscando en Pinterest, espera un momento…' }, { quoted: msg })
       if (/^https?:\/\//i.test(text)) {
         const data = await pinterestDownload(text, evogbUrl, evogbKey, deliriusUrl)
         if (!data?.url) return msg.reply('《✧》 No se pudo obtener el contenido del enlace.')
