@@ -1,3 +1,4 @@
+import { generateWAMessageFromContent, prepareWAMessageMedia } from 'baileys'
 import { sendChannelMessage } from '../../lib/channel.js'
 import fetch from 'node-fetch'
 import { execFile } from 'child_process'
@@ -68,24 +69,38 @@ export default {
         }))
         const ready = loaded.filter(r => r.status === 'fulfilled').map(r => r.value)
         if (!ready.length) return msg.reply('《✧》 No se pudieron descargar las imágenes de Pinterest.')
-        const cards = ready.map(({ item, image }, i) => ({
-          image,
-          title: String(item.title || text).slice(0, 60),
-          caption: `Resultado ${i + 1} · ${String(item.title || text).slice(0, 100)}`,
-          footer: 'Sumi Sakurasawa · Pinterest',
-          nativeFlow: [
-            { text: 'Abrir pin', url: item.link || item.image },
-            { text: 'Ver más', id: `${usedPrefix || '.'}pinterest ${text}` }
-          ]
+        console.info('[pinterest] imágenes descargadas:', ready.length)
+        const uploaded = await Promise.allSettled(ready.map(async ({ item, image }) => ({
+          item,
+          media: await bounded(prepareWAMessageMedia({ image }, { upload: sock.waUploadToServer, mediaUploadTimeoutMs: 20000 }), 25000, 'subida de imagen')
+        })))
+        const cards = uploaded.filter(r => r.status === 'fulfilled').map(({ value: { item, media } }, i) => ({
+          header: { title: String(item.title || text).slice(0, 60), hasMediaAttachment: true, ...media },
+          body: { text: `Resultado ${i + 1} · ${String(item.title || text).slice(0, 100)}` },
+          footer: { text: 'Sumi Sakurasawa · Pinterest' },
+          nativeFlowMessage: { buttons: [
+            { name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: 'Abrir pin', url: item.link || item.image, merchant_url: item.link || item.image }) },
+            { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: 'Ver más', id: `${usedPrefix || '.'}pinterest ${text}` }) }
+          ] }
         }))
-        await sock.sendMessage(msg.chat, {
-          text: `📌 *PINTEREST*\n\n🔎 ${text}\n🖼️ ${cards.length} imágenes · desliza para verlas`,
-          footer: 'Sumi Sakurasawa · Pinterest',
-          cards
-        }, { quoted: msg, mediaUploadTimeoutMs: 25000 })
-        if (ready.length < picked.length) await msg.reply(`《✧》 Se enviaron ${ready.length} de ${picked.length} imágenes; las restantes no se pudieron descargar.`)
+        if (!cards.length) throw new Error('No se pudieron subir las imágenes de Pinterest')
+        console.info('[pinterest] imágenes subidas:', cards.length)
+        const message = generateWAMessageFromContent(msg.chat, {
+          interactiveMessage: {
+            body: { text: `📌 *PINTEREST*\n\n🔎 ${text}\n🖼️ ${cards.length} imágenes · desliza para verlas` },
+            footer: { text: 'Sumi Sakurasawa · Pinterest' },
+            carouselMessage: { cards, messageVersion: 1 }
+          }
+        }, { userJid: sock.user?.id, quoted: msg })
+        await bounded(sock.relayMessage(msg.chat, message.message, {
+          messageId: message.key.id,
+          additionalNodes: [{ tag: 'biz', attrs: {}, content: [{ tag: 'interactive', attrs: { type: 'native_flow', v: '1' }, content: [{ tag: 'native_flow', attrs: { name: 'carousel' } }] }] }]
+        }), 25000, 'envío del carrusel')
+        console.info('[pinterest] carrusel enviado:', message.key.id)
+        if (cards.length < picked.length) await msg.reply(`《✧》 Se prepararon ${cards.length} de ${picked.length} imágenes; las restantes no se pudieron descargar.`)
       }
     } catch (e) {
+      console.error('[pinterest]', e?.stack || e)
       await msg.reply(`> Ocurrió un error al ejecutar el comando *${usedPrefix + command}*.\n> [Error: *${e.message}*]`)
     }
   }
@@ -152,7 +167,7 @@ async function pinterestSearch(query, deliriusUrl, vredenUrl) {
       if (!r.ok) continue
       const res = await r.json()
       if (res?.data?.length) {
-        const m = res.data.map(d => ({ image: d.hd || d.image || d.image_url, title: d.title || query })).filter(x=>x.image)
+        const m = res.data.map(d => ({ image: d.hd || d.image || d.image_url, title: d.title || query, link: d.link || d.pin_url || d.url })).filter(x=>x.image)
         if (m.length) return m
       }
       if (res?.response?.pins?.length) {
@@ -174,4 +189,10 @@ async function getBuffer(url) {
     if (!res.ok) return null
     return Buffer.from(await res.arrayBuffer())
   } catch { return null }
+}
+async function bounded(promise, ms, stage) {
+  let timer
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`Tiempo agotado: ${stage}`)), ms) })])
+  } finally { clearTimeout(timer) }
 }
