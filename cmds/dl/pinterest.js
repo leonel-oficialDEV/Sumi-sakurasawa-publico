@@ -1,4 +1,3 @@
-import { generateWAMessageFromContent, prepareWAMessageMedia } from 'baileys'
 import { sendChannelMessage } from '../../lib/channel.js'
 import fetch from 'node-fetch'
 import { execFile } from 'child_process'
@@ -44,7 +43,6 @@ export default {
               await execFileAsync('ffmpeg', ['-y','-i',input,'-c:v','libx264','-preset','veryfast','-crf','23','-c:a','aac','-movflags','+faststart',output])
               await sendChannelMessage(sock, msg.chat, { video: fs.readFileSync(output), caption, mimetype:'video/mp4', fileName:'pinterest.mp4' }, { quoted: msg })
             } catch {
-              // Si ffmpeg falla, manda el original igual como video
               await sendChannelMessage(sock, msg.chat, { video: fs.readFileSync(input), caption, mimetype:'video/mp4', fileName:'pinterest.mp4' }, { quoted: msg })
             }
           } finally { try { fs.rmSync(tempDir, { recursive:true, force:true }) } catch {} }
@@ -69,35 +67,20 @@ export default {
         }))
         const ready = loaded.filter(r => r.status === 'fulfilled').map(r => r.value)
         if (!ready.length) return msg.reply('《✧》 No se pudieron descargar las imágenes de Pinterest.')
-        console.info('[pinterest] imágenes descargadas:', ready.length)
-        const uploaded = await Promise.allSettled(ready.map(async ({ item, image }) => ({
-          item,
-          media: await bounded(prepareWAMessageMedia({ image }, { upload: sock.waUploadToServer, mediaUploadTimeoutMs: 20000 }), 25000, 'subida de imagen')
-        })))
-        const cards = uploaded.filter(r => r.status === 'fulfilled').map(({ value: { item, media } }, i) => ({
-          header: { title: String(item.title || text).slice(0, 60), hasMediaAttachment: true, ...media },
-          body: { text: `Resultado ${i + 1} · ${String(item.title || text).slice(0, 100)}` },
-          footer: { text: 'Sumi Sakurasawa · Pinterest' },
-          nativeFlowMessage: { buttons: [
-            { name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: 'Abrir pin', url: item.link || item.image, merchant_url: item.link || item.image }) },
-            { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: 'Ver más', id: `${usedPrefix || '.'}pinterest ${text}` }) }
-          ] }
+        const medias = ready.map(({ item, image }, i) => ({
+          type: 'image',
+          data: image,
+          caption: `📌 Pinterest · ${i + 1}/${ready.length}\n🔎 ${text}\n${item.title || text}\n${item.link || item.image}`
         }))
-        if (!cards.length) throw new Error('No se pudieron subir las imágenes de Pinterest')
-        console.info('[pinterest] imágenes subidas:', cards.length)
-        const message = generateWAMessageFromContent(msg.chat, {
-          interactiveMessage: {
-            body: { text: `📌 *PINTEREST*\n\n🔎 ${text}\n🖼️ ${cards.length} imágenes · desliza para verlas` },
-            footer: { text: 'Sumi Sakurasawa · Pinterest' },
-            carouselMessage: { cards, messageVersion: 1 }
+        if (medias.length > 1 && typeof sock.sendAlbumMessage === 'function') {
+          await sock.sendAlbumMessage(msg.chat, medias, { quoted: msg })
+        } else {
+          for (const media of medias) {
+            await sock.sendMessage(msg.chat, { image: media.data, caption: media.caption }, { quoted: msg })
           }
-        }, { userJid: sock.user?.id, quoted: msg })
-        await bounded(sock.relayMessage(msg.chat, message.message, {
-          messageId: message.key.id,
-          additionalNodes: [{ tag: 'biz', attrs: {}, content: [{ tag: 'interactive', attrs: { type: 'native_flow', v: '1' }, content: [{ tag: 'native_flow', attrs: { name: 'carousel' } }] }] }]
-        }), 25000, 'envío del carrusel')
-        console.info('[pinterest] carrusel enviado:', message.key.id)
-        if (cards.length < picked.length) await msg.reply(`《✧》 Se prepararon ${cards.length} de ${picked.length} imágenes; las restantes no se pudieron descargar.`)
+        }
+        console.info('[pinterest] álbum enviado:', medias.length)
+        if (ready.length < picked.length) await msg.reply(`《✧》 Se enviaron ${ready.length} de ${picked.length} imágenes; las restantes no se pudieron descargar.`)
       }
     } catch (e) {
       console.error('[pinterest]', e?.stack || e)
@@ -189,10 +172,4 @@ async function getBuffer(url) {
     if (!res.ok) return null
     return Buffer.from(await res.arrayBuffer())
   } catch { return null }
-}
-async function bounded(promise, ms, stage) {
-  let timer
-  try {
-    return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`Tiempo agotado: ${stage}`)), ms) })])
-  } finally { clearTimeout(timer) }
 }
