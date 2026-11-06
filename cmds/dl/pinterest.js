@@ -54,12 +54,35 @@ export default {
         const results = await pinterestSearch(text, deliriusUrl, vredenUrl)
         if (!results.length) return msg.reply(`《✧》 No se encontraron resultados para *${text}*.`)
 
-        const medias = results.filter(r => r.image && /^https?:\/\//i.test(r.image)).slice(0, 15).map(r => ({
-          type: 'image',
-          data: { url: r.image },
-          caption: `ㅤ۟∩ ׅ ★ ׅ 🅟𝖨𝖭 🅢earch ׄᰙ \n\n${r.title? `𖣣ֶㅤ֯⌗ ☆  ⬭ *Título* › ${r.title}\n` : ''}𖣣ֶㅤ֯⌗ ☆  ⬭ *Búsqueda* › ${text}\n`
+        const seen = new Set()
+        const picked = results.filter(r => {
+          if (!/^https?:\/\//i.test(r.image || '') || seen.has(r.image)) return false
+          seen.add(r.image)
+          return true
+        }).slice(0, 8)
+        const loaded = await Promise.allSettled(picked.map(async item => {
+          const image = await getBuffer(item.image.replace('/originals/', '/474x/')) || await getBuffer(item.image)
+          if (!image) throw new Error('No se pudo descargar una imagen')
+          return { item, image }
         }))
-        await sock.sendAlbumMessage( msg.chat, medias, { quoted: msg })
+        const ready = loaded.filter(r => r.status === 'fulfilled').map(r => r.value)
+        if (!ready.length) return msg.reply('《✧》 No se pudieron descargar las imágenes de Pinterest.')
+        const cards = ready.map(({ item, image }, i) => ({
+          image,
+          title: String(item.title || text).slice(0, 60),
+          caption: `Resultado ${i + 1} · ${String(item.title || text).slice(0, 100)}`,
+          footer: 'Sumi Sakurasawa · Pinterest',
+          nativeFlow: [
+            { text: 'Abrir pin', url: item.link || item.image },
+            { text: 'Ver más', id: `${usedPrefix || '.'}pinterest ${text}` }
+          ]
+        }))
+        await sock.sendMessage(msg.chat, {
+          text: `📌 *PINTEREST*\n\n🔎 ${text}\n🖼️ ${cards.length} imágenes · desliza para verlas`,
+          footer: 'Sumi Sakurasawa · Pinterest',
+          cards
+        }, { quoted: msg, mediaUploadTimeoutMs: 25000 })
+        if (ready.length < picked.length) await msg.reply(`《✧》 Se enviaron ${ready.length} de ${picked.length} imágenes; las restantes no se pudieron descargar.`)
       }
     } catch (e) {
       await msg.reply(`> Ocurrió un error al ejecutar el comando *${usedPrefix + command}*.\n> [Error: *${e.message}*]`)
@@ -74,7 +97,7 @@ async function pinterestDownload(url, evogbUrl, evogbKey, deliriusUrl) {
 
   for (const endpoint of endpoints) {
     try {
-      const r = await fetch(endpoint)
+      const r = await fetch(endpoint, { signal: AbortSignal.timeout(20000) })
       if (!r.ok) continue
       const res = await r.json()
       
@@ -124,7 +147,7 @@ async function pinterestSearch(query, deliriusUrl, vredenUrl) {
 
   for (const endpoint of endpoints) {
     try {
-      const r = await fetch(endpoint)
+      const r = await fetch(endpoint, { signal: AbortSignal.timeout(20000) })
       if (!r.ok) continue
       const res = await r.json()
       if (res?.data?.length) {
@@ -146,7 +169,7 @@ async function pinterestSearch(query, deliriusUrl, vredenUrl) {
 
 async function getBuffer(url) {
   try {
-    const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0', 'referer': 'https://www.pinterest.com/' } })
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { 'user-agent': 'Mozilla/5.0', 'referer': 'https://www.pinterest.com/' } })
     if (!res.ok) return null
     return Buffer.from(await res.arrayBuffer())
   } catch { return null }
