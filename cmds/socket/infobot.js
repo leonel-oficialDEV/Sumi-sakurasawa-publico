@@ -1,3 +1,4 @@
+import { channelContent } from '../../lib/channel.js'
 import db from "#db"
 import os from 'os'
 
@@ -75,13 +76,13 @@ export default {
       try {
         if (!banner) throw new Error('No banner')
         if (isVideo) {
-          await sock.sendMessage(msg.chat, { video: { url: banner }, caption: menu, contextInfo: ctx }, { quoted: msg })
+          await sock.sendMessage(msg.chat, channelContent({ video: { url: banner }, caption: menu, contextInfo: ctx }, msg.chat, true), { quoted: msg })
         } else {
-          await sock.sendMessage(msg.chat, { image: { url: banner }, caption: menu, contextInfo: ctx }, { quoted: msg })
+          await sock.sendMessage(msg.chat, channelContent({ image: { url: banner }, caption: menu, contextInfo: ctx }, msg.chat, true), { quoted: msg })
         }
       } catch (err) {
         console.error('[INFOBOT BANNER ERROR]', err)
-        await sock.sendMessage(msg.chat, { text: menu, linkPreview: false, contextInfo: ctx }, { quoted: msg })
+        await sock.sendMessage(msg.chat, channelContent({ text: menu, linkPreview: false, contextInfo: ctx }, msg.chat, true), { quoted: msg })
       }
     } catch (e) {
       console.error('[INFOBOT ERROR]', e)
