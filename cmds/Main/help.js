@@ -1,7 +1,6 @@
 import db from "#db"
 import fs from 'fs'
 import path from 'path'
-import { prepareWAMessageMedia } from 'baileys'
 import moment from 'moment-timezone'
 import os from 'os'
 
@@ -120,13 +119,12 @@ export default {
         if (isVideo) {
           await sock.sendMessage(msg.chat, { video: { url: banner }, caption: finalText, contextInfo: ctx }, { quoted: msg })
         } else {
-          const preview = link ? await prepareWAMessageMedia({ image: { url: banner } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' }).then(m => ({ 'canonical-url': link, 'matched-text': link, title: namebot, description: `${namebot2}, Built With 💜 By ᗩᗴTᕼᗴR ≜ ᒪᗩᗷՏ™ `, jpegThumbnail: m.imageMessage?.jpegThumbnail ? Buffer.from(m.imageMessage.jpegThumbnail) : undefined, highQualityThumbnail: m.imageMessage || undefined })) : undefined
-          await sock.sendMessage(msg.chat, { text: finalText, linkPreview: preview, contextInfo: ctx }, { quoted: msg })
+          await sock.sendMessage(msg.chat, { image: { url: banner }, caption: finalText, contextInfo: ctx }, { quoted: msg })
         }
       } catch (err) {
         // Si falla la imagen/video, manda solo texto
         console.log('[menu] Falló banner, enviando sin foto:', err.message)
-        await sock.sendMessage(msg.chat, { text: finalText, contextInfo: ctx }, { quoted: msg })
+        await sock.sendMessage(msg.chat, { text: finalText, linkPreview: false, contextInfo: ctx }, { quoted: msg })
       }
 
     } catch (e) {
