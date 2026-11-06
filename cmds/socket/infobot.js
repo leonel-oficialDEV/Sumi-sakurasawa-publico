@@ -67,6 +67,7 @@ export default {
 ✿ *NodeJS:* ${nodeVersion}
 ✿ *Host ID:* ${hostId}
 
+> *Canal de novedades:* ${global.links.channel}
 > \`Enlace:\` ${link}`.trim()
 
       const isVideo = /\.(mp4|gif|webm)$/i.test(banner)
