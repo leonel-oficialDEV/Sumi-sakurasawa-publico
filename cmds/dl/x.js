@@ -1,3 +1,4 @@
+import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
 import fetch from 'node-fetch'
 import fs from 'fs'
 import os from 'os'
@@ -31,13 +32,13 @@ export default {
           const buffer = Buffer.from(await res.arrayBuffer())
           fs.writeFileSync(inputPath, buffer)
           await execAsync(`ffmpeg -y -i "${inputPath}" -c:v libx264 -preset fast -crf 28 -c:a aac -b:a 128k -movflags +faststart "${outputPath}"`)
-          await sock.sendMessage(msg.chat, { video: fs.readFileSync(outputPath), caption, mimetype: 'video/mp4', fileName: 'twitter.mp4' }, { quoted: msg })
+          await sendChannelMessage(sock, msg.chat, { video: fs.readFileSync(outputPath), caption, mimetype: 'video/mp4', fileName: 'twitter.mp4' }, { quoted: msg })
         } finally {
           if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath)
           if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath)
         }
       } else if (data.type === 'image') {
-        await sock.sendMessage(msg.chat, { image: { url: data.url }, caption }, { quoted: msg })
+        await sendChannelMessage(sock, msg.chat, { image: { url: data.url }, caption }, { quoted: msg })
       } else {
         throw new Error('Contenido no soportado.')
       }

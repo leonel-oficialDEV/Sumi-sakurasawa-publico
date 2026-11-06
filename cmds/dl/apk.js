@@ -1,3 +1,4 @@
+import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
 import fetch from 'node-fetch'
 
 export default {
@@ -9,7 +10,7 @@ export default {
     const options = isChannel ? undefined : { quoted: msg }
 
     if (!args || !args.length) {
-      return sock.sendMessage(msg.chat, { text: '《✧》 Por favor, ingresa el nombre de la aplicación o un enlace de Mediafire.' }, options)
+      return sendChannelMessage(sock, msg.chat, { text: '《✧》 Por favor, ingresa el nombre de la aplicación o un enlace de Mediafire.' }, options)
     }
 
     const query = args.join(' ').trim()
@@ -18,17 +19,17 @@ export default {
       if (/https?:\/\/(www\.)?mediafire\.com/i.test(query)) {
         const mfData = await scrapeMediafire(query)
         if (!mfData || !mfData.link) {
-          return sock.sendMessage(msg.chat, { text: '《✧》 No se pudo extraer el enlace de Mediafire.' }, options)
+          return sendChannelMessage(sock, msg.chat, { text: '《✧》 No se pudo extraer el enlace de Mediafire.' }, options)
         }
 
         const sizeBytes = parseSize(mfData.size)
         const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n✰ ᩧ 𓈒 ׄ Mediafire Directo  ׅ ✿\n\n➩ *Nombre ›* ${mfData.name}\n☆ *Tamaño ›* ${mfData.size}\n🔗 *Enlace ›* ${mfData.link}`
 
         if (sizeBytes > 524288000) {
-          return sock.sendMessage(msg.chat, { text: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n《✧》 El archivo supera el límite (500 MB) con un tamaño de ${mfData.size}.\n> Descárgalo directamente aquí:\n${mfData.link}` }, options)
+          return sendChannelMessage(sock, msg.chat, { text: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n《✧》 El archivo supera el límite (500 MB) con un tamaño de ${mfData.size}.\n> Descárgalo directamente aquí:\n${mfData.link}` }, options)
         }
 
-        return await sock.sendMessage(msg.chat, {
+        return await sendChannelMessage(sock, msg.chat, {
           document: { url: mfData.link },
           mimetype: mfData.mime || 'application/octet-stream',
           fileName: mfData.name,
@@ -42,10 +43,10 @@ export default {
         const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n✰ ᩧ 𓈒 ׄ{ Búsqueda Mediafire APK } ׅ ✿\n\n➩ *Nombre ›* ${mfSearch.name}\n☆ *Tamaño ›* ${mfSearch.size}\n🔗 *Descarga Directa ›* ${mfSearch.link}\n🌐 *Fuente ›* ${mfSearch.sourceUrl}`
 
         if (sizeBytes > 524288000) {
-          return sock.sendMessage(msg.chat, { text: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n《✧》 El archivo supera el límite (${mfSearch.size}).\n> Descárgalo directamente aquí:\n${mfSearch.link}` }, options)
+          return sendChannelMessage(sock, msg.chat, { text: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n《✧》 El archivo supera el límite (${mfSearch.size}).\n> Descárgalo directamente aquí:\n${mfSearch.link}` }, options)
         }
 
-        return await sock.sendMessage(msg.chat, {
+        return await sendChannelMessage(sock, msg.chat, {
           document: { url: mfSearch.link },
           mimetype: mfSearch.mime || 'application/vnd.android.package-archive',
           fileName: mfSearch.name.endsWith('.apk') || mfSearch.name.endsWith('.zip') || mfSearch.name.endsWith('.rar') ? mfSearch.name : `${mfSearch.name}.apk`,
@@ -60,10 +61,10 @@ export default {
         const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n✰ ᩧ 𓈒 ׄ Aptoide Downloader  ׅ ✿\n\n➩ *Nombre ›* ${apkInfo.name}\n❖ *Paquete ›* ${apkInfo.package}\n🏢 *Desarrollador ›* ${apkInfo.developer}\n✿ *Última actualización ›* ${apkInfo.lastup}\n☆ *Tamaño ›* ${formattedSize}\n🔗 *Fuente ›* ${apkInfo.downloadUrl}`
 
         if (apkInfo.size > 524288000) {
-          return sock.sendMessage(msg.chat, { text: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n《✧》 El archivo es demasiado grande (${formattedSize}).\n> Descárgalo directamente aquí:\n${apkInfo.downloadUrl}` }, options)
+          return sendChannelMessage(sock, msg.chat, { text: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n《✧》 El archivo es demasiado grande (${formattedSize}).\n> Descárgalo directamente aquí:\n${apkInfo.downloadUrl}` }, options)
         }
 
-        return await sock.sendMessage(msg.chat, {
+        return await sendChannelMessage(sock, msg.chat, {
           document: { url: apkInfo.downloadUrl },
           mimetype: 'application/vnd.android.package-archive',
           fileName: `${apkInfo.name}.apk`,
@@ -71,10 +72,10 @@ export default {
         }, options)
       }
 
-      return sock.sendMessage(msg.chat, { text: '《✧》 No se encontraron juegos ni aplicaciones válidas para esa búsqueda.' }, options)
+      return sendChannelMessage(sock, msg.chat, { text: '《✧》 No se encontraron juegos ni aplicaciones válidas para esa búsqueda.' }, options)
 
     } catch (e) {
-      await sock.sendMessage(msg.chat, { text: `> Ocurrió un error al ejecutar *${usedPrefix + command}*.\n> [Error: *${e.message}*]` }, options)
+      await sendChannelMessage(sock, msg.chat, { text: `> Ocurrió un error al ejecutar *${usedPrefix + command}*.\n> [Error: *${e.message}*]` }, options)
     }
   }
 }

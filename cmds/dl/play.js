@@ -1,3 +1,4 @@
+import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
 import axios from 'axios'
 import yts from 'yt-search'
 import { getBuffer } from '#serialize'
@@ -169,13 +170,13 @@ async function procesarRespuesta(sock, msg) {
   if (DESCARGAS_ACTIVAS.has(clave)) return
   DESCARGAS_ACTIVAS.add(clave)
   try {
-    await sock.sendMessage(chatId, { react: { text: '🕒', key: msg.key } })
+    await sendChannelMessage(sock, chatId, { react: { text: '🕒', key: msg.key } })
     const isAudio = tipo === 'audio'
     const wanted = isAudio ? DEFAULT_MP3 : DEFAULT_MP4
     const result = await convertWithFallback(registro.videoId, isAudio, wanted)
     if (!result) throw new Error('No se pudo convertir.')
     const safeName = limpiarTexto(registro.titulo) || 'youtube'
-    const send = (media) => sock.sendMessage(chatId, isAudio
+    const send = (media) => sendChannelMessage(sock, chatId, isAudio
       ? { audio: media, mimetype: 'audio/mpeg', fileName: `${safeName}.mp3` }
       : { video: media, mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ ${registro.titulo}\n✎ Calidad: ${result.quality}` }
       , { quoted: msg })
@@ -184,10 +185,10 @@ async function procesarRespuesta(sock, msg) {
       const res = await cnv.get(result.url, { responseType: 'arraybuffer', timeout: 180000 })
       await send(Buffer.from(res.data))
     }
-    await sock.sendMessage(chatId, { react: { text: '✅', key: msg.key } })
+    await sendChannelMessage(sock, chatId, { react: { text: '✅', key: msg.key } })
   } catch (error) {
-    await sock.sendMessage(chatId, { react: { text: '❌', key: msg.key } }).catch(() => {})
-    await sock.sendMessage(chatId, { text: `《✧》 No se pudo descargar el ${tipo}.\n\n> Error: ${String(error?.message || error).slice(0, 700)}` }, { quoted: msg }).catch(() => {})
+    await sendChannelMessage(sock, chatId, { react: { text: '❌', key: msg.key } }).catch(() => {})
+    await sendChannelMessage(sock, chatId, { text: `《✧》 No se pudo descargar el ${tipo}.\n\n> Error: ${String(error?.message || error).slice(0, 700)}` }, { quoted: msg }).catch(() => {})
   } finally {
     DESCARGAS_ACTIVAS.delete(clave)
   }
@@ -215,17 +216,17 @@ export default {
     try {
       registrarEscucha(sock)
       if (!consulta) {
-        return sock.sendMessage(chatId, { text: `《✧》 Uso: *${command}* <nombre o link>\n\n> Ej: ${command} diles - Bad Bunny` }, opciones)
+        return sendChannelMessage(sock, chatId, { text: `《✧》 Uso: *${command}* <nombre o link>\n\n> Ej: ${command} diles - Bad Bunny` }, opciones)
       }
       const isAudioCommand = ['play', 'mp3', 'playaudio', 'ytaudio', 'ytmp3', 'yta'].includes(command)
       const isVideoCommand = ['play2', 'playvid', 'ytmp4', 'mp4', 'ytv', 'ytdl'].includes(command)
-      await sock.sendMessage(chatId, { react: { text: '🕒', key: msg.key } })
+      await sendChannelMessage(sock, chatId, { react: { text: '🕒', key: msg.key } })
       const video = await buscarVideo(consulta)
       const videoId = video.videoId || extractVideoId(video.url) || extractVideoId(consulta)
       if (!videoId) throw new Error('No se pudo obtener el ID del video.')
       const secs = Number(video.seconds) || toSeconds(video.timestamp)
       if (secs && secs > MAX_SECONDS) {
-        return sock.sendMessage(chatId, { text: `ꕤ El video dura *${video.timestamp}* y supera el límite de *${MAX_SECONDS / 60} min*.` }, opciones)
+        return sendChannelMessage(sock, chatId, { text: `ꕤ El video dura *${video.timestamp}* y supera el límite de *${MAX_SECONDS / 60} min*.` }, opciones)
       }
       let informacion = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ *${video.title}*\n\n`
       informacion += `> ❖ Canal › *${video.author?.name || 'Desconocido'}*\n`
@@ -234,21 +235,21 @@ export default {
       informacion += `> ❒ Link › ${video.url}\n\n`
       informacion += `> _Descargando ${isAudioCommand ? 'audio' : 'video'} espera..._`
       try {
-        await sock.sendMessage(chatId, { image: await getBuffer(video.thumbnail), caption: informacion }, opciones)
+        await sendChannelMessage(sock, chatId, { image: await getBuffer(video.thumbnail), caption: informacion }, opciones)
       } catch {
-        await sock.sendMessage(chatId, { text: informacion }, opciones)
+        await sendChannelMessage(sock, chatId, { text: informacion }, opciones)
       }
       if (isAudioCommand) {
         const result = await convertWithFallback(videoId, true, DEFAULT_MP3)
         if (!result) throw new Error('No se pudo convertir el audio.')
         const safeName = limpiarTexto(video.title) || 'youtube'
         try {
-          await sock.sendMessage(chatId, { audio: { url: result.url }, mimetype: 'audio/mpeg', fileName: `${safeName}.mp3`, ptt: false }, opciones)
+          await sendChannelMessage(sock, chatId, { audio: { url: result.url }, mimetype: 'audio/mpeg', fileName: `${safeName}.mp3`, ptt: false }, opciones)
         } catch {
           const res = await cnv.get(result.url, { responseType: 'arraybuffer', timeout: 180000 })
-          await sock.sendMessage(chatId, { audio: Buffer.from(res.data), mimetype: 'audio/mpeg', fileName: `${safeName}.mp3` }, opciones)
+          await sendChannelMessage(sock, chatId, { audio: Buffer.from(res.data), mimetype: 'audio/mpeg', fileName: `${safeName}.mp3` }, opciones)
         }
-        await sock.sendMessage(chatId, { react: { text: '✅', key: msg.key } })
+        await sendChannelMessage(sock, chatId, { react: { text: '✅', key: msg.key } })
         return
       }
       if (isVideoCommand) {
@@ -256,12 +257,12 @@ export default {
         if (!result) throw new Error('No se pudo convertir el video.')
         const safeName = limpiarTexto(video.title) || 'youtube'
         try {
-          await sock.sendMessage(chatId, { video: { url: result.url }, mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ ${video.title}\n✎ Calidad: ${result.quality}` }, opciones)
+          await sendChannelMessage(sock, chatId, { video: { url: result.url }, mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ ${video.title}\n✎ Calidad: ${result.quality}` }, opciones)
         } catch {
           const res = await cnv.get(result.url, { responseType: 'arraybuffer', timeout: 180000 })
-          await sock.sendMessage(chatId, { video: Buffer.from(res.data), mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ ${video.title}` }, opciones)
+          await sendChannelMessage(sock, chatId, { video: Buffer.from(res.data), mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ ${video.title}` }, opciones)
         }
-        await sock.sendMessage(chatId, { react: { text: '✅', key: msg.key } })
+        await sendChannelMessage(sock, chatId, { react: { text: '✅', key: msg.key } })
         return
       }
       let infoSelect = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ Descargando › ${video.title}\n\n`
@@ -274,9 +275,9 @@ export default {
       infoSelect += '> *v* para video'
       let enviado
       try {
-        enviado = await sock.sendMessage(chatId, { image: await getBuffer(video.thumbnail), caption: infoSelect }, opciones)
+        enviado = await sendChannelMessage(sock, chatId, { image: await getBuffer(video.thumbnail), caption: infoSelect }, opciones)
       } catch {
-        enviado = await sock.sendMessage(chatId, { text: infoSelect }, opciones)
+        enviado = await sendChannelMessage(sock, chatId, { text: infoSelect }, opciones)
       }
       if (!enviado?.key?.id) throw new Error('No se pudo registrar el mensaje.')
       REGISTROS.set(`${chatId}:${enviado.key.id}`, { url: video.url, videoId, titulo: video.title, duracion: secs, solicitante: obtenerJidUsuario(msg, sock) })
@@ -285,10 +286,10 @@ export default {
         if (primera) REGISTROS.delete(primera)
       }
       setTimeout(() => { REGISTROS.delete(`${chatId}:${enviado.key.id}`) }, 900000).unref?.()
-      await sock.sendMessage(chatId, { react: { text: '✅', key: msg.key } })
+      await sendChannelMessage(sock, chatId, { react: { text: '✅', key: msg.key } })
     } catch (error) {
-      await sock.sendMessage(chatId, { react: { text: '❌', key: msg.key } }).catch(() => {})
-      await sock.sendMessage(chatId, { text: `《✧》 Error: ${String(error?.message || error).slice(0, 800)}` }, opciones).catch(() => {})
+      await sendChannelMessage(sock, chatId, { react: { text: '❌', key: msg.key } }).catch(() => {})
+      await sendChannelMessage(sock, chatId, { text: `《✧》 Error: ${String(error?.message || error).slice(0, 800)}` }, opciones).catch(() => {})
     }
   }
 }

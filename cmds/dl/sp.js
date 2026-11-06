@@ -1,3 +1,4 @@
+import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
 import db from "#db"
 import fetch from 'node-fetch'
 import { getBuffer } from "#serialize"
@@ -46,7 +47,7 @@ export default {
 
       let yi = songInfo.image || songInfo.cover
 
-      await sock.sendMessage(msg.chat, { image: { url: yi }, caption }, { quoted: msg })
+      await sendChannelMessage(sock, msg.chat, { image: { url: yi }, caption }, { quoted: msg })
 
       const resAudio = await fetch(`${api.url}/dl/spotify?url=${encodeURIComponent(url)}&key=${api.key}`)
       const resultAudio = await resAudio.json()
@@ -66,7 +67,7 @@ const mensaje = {
   fileName: `${resultAudio.data.title || 'music'}.mp3` 
 };
 
-await sock.sendMessage(msg.chat, mensaje, { quoted: msg });
+await sendChannelMessage(sock, msg.chat, mensaje, { quoted: msg });
 
     } catch (e) {
       await msg.reply(msgglobal)

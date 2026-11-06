@@ -1,3 +1,4 @@
+import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
 import db from "#db"
 import fetch from 'node-fetch';
 
@@ -27,9 +28,9 @@ export default {
       info += `> ❖ Subido › *${uploaded}*\n\n`;
       info += `⇢ Descargando y enviando archivo...`;
 
-    await msg.reply(info)
+    await sendChannelMessage(sock, msg.chat, { text: info }, { quoted: msg })
 
-      await sock.sendMessage(
+      await sendChannelMessage(sock, 
         msg.chat,
         {
           document: { url: download },

@@ -1,3 +1,4 @@
+import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
 import yts from 'yt-search'
 import axios from 'axios'
 import { getBuffer } from '#serialize'
@@ -146,7 +147,7 @@ export default {
         .map(render)
         .join('\n\n╾۪〬─ ┄۫╌ ׄ┄┈۪ ─〬 ׅ┄╌ ۫┈ ─ׄ─۪〬 ┈ ┄۫╌ ۫┈ ─ׄ─۪〬 ┈ ┄۫╌ ─ׄ〬╼\n\n')
 
-      await sock.sendMessage(
+      await sendChannelMessage(sock, 
         msg.chat,
         Ibuff ? { image: Ibuff, caption: teks2 } : { text: teks2 },
         { quoted: msg }

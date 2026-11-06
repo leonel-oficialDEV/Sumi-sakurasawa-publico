@@ -1,3 +1,4 @@
+import { sendChannelMessage } from '../../lib/channel.js'
 import fetch from 'node-fetch'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -39,15 +40,15 @@ export default {
             fs.writeFileSync(input, Buffer.from(await res.arrayBuffer()))
             try {
               await execFileAsync('ffmpeg', ['-y','-i',input,'-c:v','libx264','-preset','veryfast','-crf','23','-c:a','aac','-movflags','+faststart',output])
-              await sock.sendMessage(msg.chat, { video: fs.readFileSync(output), caption, mimetype:'video/mp4', fileName:'pinterest.mp4' }, { quoted: msg })
+              await sendChannelMessage(sock, msg.chat, { video: fs.readFileSync(output), caption, mimetype:'video/mp4', fileName:'pinterest.mp4' }, { quoted: msg })
             } catch {
               // Si ffmpeg falla, manda el original igual como video
-              await sock.sendMessage(msg.chat, { video: fs.readFileSync(input), caption, mimetype:'video/mp4', fileName:'pinterest.mp4' }, { quoted: msg })
+              await sendChannelMessage(sock, msg.chat, { video: fs.readFileSync(input), caption, mimetype:'video/mp4', fileName:'pinterest.mp4' }, { quoted: msg })
             }
           } finally { try { fs.rmSync(tempDir, { recursive:true, force:true }) } catch {} }
         } else {
           const buf = await getBuffer(data.url)
-          await sock.sendMessage(msg.chat, { image: buf? buf : { url: data.url }, caption }, { quoted: msg })
+          await sendChannelMessage(sock, msg.chat, { image: buf? buf : { url: data.url }, caption }, { quoted: msg })
         }
       } else {
         const results = await pinterestSearch(text, deliriusUrl, vredenUrl)
@@ -58,7 +59,7 @@ export default {
           data: { url: r.image },
           caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\nㅤ۟∩ ׅ ★ ׅ 🅟𝖨𝖭 🅢earch ׄᰙ \n\n${r.title? `𖣣ֶㅤ֯⌗ ☆  ⬭ *Título* › ${r.title}\n` : ''}𖣣ֶㅤ֯⌗ ☆  ⬭ *Búsqueda* › ${text}\n`
         }))
-        await sock.sendAlbumMessage(msg.chat, medias, { quoted: msg })
+        await sock.sendAlbumMessage( msg.chat, medias, { quoted: msg })
       }
     } catch (e) {
       await msg.reply(`> Ocurrió un error al ejecutar el comando *${usedPrefix + command}*.\n> [Error: *${e.message}*]`)

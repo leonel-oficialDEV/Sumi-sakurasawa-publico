@@ -1,3 +1,4 @@
+import { sendChannelMessage, sendChannelAlbum } from '../../lib/channel.js'
 import fetch from 'node-fetch'
 
 export default {
@@ -16,9 +17,9 @@ export default {
       if (!data) return msg.reply('《✧》 No se pudo obtener el contenido.')
       const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\nㅤ۟∩　ׅ　★　ׅ　🅕𝖡 🅓ownload　ׄᰙ　\n\n${data.title ? `𖣣ֶㅤ֯⌗ ☆  ׄ ⬭ *Titulo* › ${data.title}\n` : ''}${data.resolution ? `𖣣ֶㅤ֯⌗ ☆  ׄ ⬭ *Resolución* › ${data.resolution}\n` : ''}${data.format ? `𖣣ֶㅤ֯⌗ ☆  ׄ ⬭ *Formato* › ${data.format}\n` : ''}${data.duration ? `𖣣ֶㅤ֯⌗ ☆  ׄ ⬭ *Duración* › ${data.duration}\n` : ''}𖣣ֶㅤ֯⌗ ☆  ׄ ⬭ *Enlace* › ${args[0]}`
       if (data.type === 'video') {
-        await sock.sendMessage(msg.chat, { video: { url: data.url }, caption, mimetype: 'video/mp4', fileName: 'fb.mp4' }, { quoted: msg })
+        await sendChannelMessage(sock, msg.chat, { video: { url: data.url }, caption, mimetype: 'video/mp4', fileName: 'fb.mp4' }, { quoted: msg })
       } else if (data.type === 'image') {
-        await sock.sendMessage(msg.chat, { image: { url: data.url }, caption }, { quoted: msg })
+        await sendChannelMessage(sock, msg.chat, { image: { url: data.url }, caption }, { quoted: msg })
       } else {
         throw new Error('Contenido no soportado.')
       }

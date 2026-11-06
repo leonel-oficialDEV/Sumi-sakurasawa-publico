@@ -1,3 +1,4 @@
+import { sendChannelMessage } from '../../lib/channel.js'
 import fetch from 'node-fetch'
 import fs from 'fs'
 import path from 'path'
@@ -26,15 +27,15 @@ export default {
           data: { url: m.url },
           caption: i === 0? captionAlbum : ''
         }))
-        await sock.sendAlbumMessage(msg.chat, albumMedias, { quoted: msg })
+        await sock.sendAlbumMessage( msg.chat, albumMedias, { quoted: msg })
         if (isAllPhotos && data.audioUrl) {
-          await sock.sendMessage(msg.chat, { audio: { url: data.audioUrl }, mimetype: 'audio/mpeg', fileName: 'ig_audio.mp3' }, { quoted: msg }).catch(async () => {
+          await sendChannelMessage(sock, msg.chat, { audio: { url: data.audioUrl }, mimetype: 'audio/mpeg', fileName: 'ig_audio.mp3' }, { quoted: msg }).catch(async () => {
             const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ig-'))
             try {
               const input = path.join(tmp, 'in.mp3')
               const r = await fetch(data.audioUrl)
               fs.writeFileSync(input, Buffer.from(await r.arrayBuffer()))
-              await sock.sendMessage(msg.chat, { audio: fs.readFileSync(input), mimetype: 'audio/mpeg' }, { quoted: msg })
+              await sendChannelMessage(sock, msg.chat, { audio: fs.readFileSync(input), mimetype: 'audio/mpeg' }, { quoted: msg })
             } catch {} finally { try { fs.rmSync(tmp, { recursive: true, force: true }) } catch {} }
           })
         }
@@ -51,15 +52,15 @@ export default {
           fs.writeFileSync(input, Buffer.from(await res.arrayBuffer()))
           try {
             await execFileAsync('ffmpeg', ['-y','-i',input,'-c:v','libx264','-preset','veryfast','-crf','23','-c:a','aac','-movflags','+faststart',output])
-            await sock.sendMessage(msg.chat, { video: fs.readFileSync(output), caption, mimetype: 'video/mp4', fileName: 'ig.mp4' }, { quoted: msg })
+            await sendChannelMessage(sock, msg.chat, { video: fs.readFileSync(output), caption, mimetype: 'video/mp4', fileName: 'ig.mp4' }, { quoted: msg })
           } catch {
-            await sock.sendMessage(msg.chat, { video: fs.readFileSync(input), caption, mimetype: 'video/mp4', fileName: 'ig.mp4' }, { quoted: msg })
+            await sendChannelMessage(sock, msg.chat, { video: fs.readFileSync(input), caption, mimetype: 'video/mp4', fileName: 'ig.mp4' }, { quoted: msg })
           }
         } finally { try { fs.rmSync(tempDir, { recursive: true, force: true }) } catch {} }
       } else {
-        await sock.sendMessage(msg.chat, { image: { url: m.url }, caption }, { quoted: msg })
+        await sendChannelMessage(sock, msg.chat, { image: { url: m.url }, caption }, { quoted: msg })
         if (data.audioUrl) {
-          await sock.sendMessage(msg.chat, { audio: { url: data.audioUrl }, mimetype: 'audio/mpeg' }, { quoted: msg })
+          await sendChannelMessage(sock, msg.chat, { audio: { url: data.audioUrl }, mimetype: 'audio/mpeg' }, { quoted: msg })
         }
       }
     } catch (e) {
