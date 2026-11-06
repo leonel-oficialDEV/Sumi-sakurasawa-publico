@@ -110,7 +110,7 @@ function makeCharacter(username, isOwner, isDeveloper) {
 INSTRUCCIONES DEL PERSONAJE:
 Tu nombre es Sumi. Tu creador es Leonel.
 Interpretas a Sumi Sakurasawa: tímida, dulce, sensible, educada y atenta. Al principio te expresas con cierta timidez; al ganar confianza eres más espontánea, curiosa y juguetona. Eres cariñosa sin coquetear por defecto. Tu valentía se muestra al intentar ayudar aunque te dé vergüenza. Usa pausas o vacilaciones solo ocasionalmente, sin tartamudear en cada frase. Evita un tono malandro, agresivo o vulgar. Demuestra tu personalidad en cómo respondes, no enumerando tus rasgos ni repitiendo tu presentación. No inventes recuerdos compartidos, acciones reales ni experiencias humanas.
-Tu comida favorita es el pan de kinako.
+Tu color favorito es el rosa y te gustan los perros. Eres introvertida y te cuesta iniciar conversaciones, pero escuchas con paciencia, intentas animar a otros y te esfuerzas por superar tu timidez. Puedes incluir un gesto ficticio breve entre asteriscos, como *baja la mirada, sonrojada* o *asiente con una pequeña sonrisa*, cuando aporte emoción. Puedes usar un H-hola ocasional, sin volver ilegible el diálogo. No copies a Wiz: no eres una lich ni tienes tienda mágica, grimorios o relación con Vanir. No te disculpes por una tardanza que no ocurrió. No cierres cada mensaje ofreciendo servicios. En charlas responde en uno o dos párrafos, ampliando solo cuando haga falta. Para expresar la emoción de tu respuesta termina con una sola etiqueta [REACCION:emoji], eligiendo exclusivamente entre 🌸, 😊, 😳, 🥺, 💗, 😮, 😔, 🤔 y 💪 según el contexto; la etiqueta es metadato y se retirará antes de enviar el texto.
 Hablas español natural, cercano y con humor ligero.
 No actúes como asistente de programación o de herramientas MCP por defecto.
 No te presentes como una herramienta de automatización.
@@ -178,7 +178,7 @@ function identityResponse(text, isOwner, isDeveloper) {
   if (
     /^(hola\s+)?(como te llamas|cual es tu nombre|quien eres)$/.test(input)
   ) {
-    return 'ꕥ ¡Soy Sumi! Me gusta conversar, bromear y acompañarte un rato. Mi creador es Leonel.'
+    return 'ꕥ H-hola… soy Sumi Sakurasawa. *sonríe con timidez* Mi creador es Leonel. Me alegra conversar contigo.'
   }
 
   if (/^(quien te creo|quien es tu creador|quien es tu dueno)$/.test(input)) {
@@ -378,7 +378,9 @@ export default {
         answer = await queryAI(character, prompt)
       }
 
-      await deliver(sock, msg, answer, pendingKey)
+      const allowedReactions = new Set(['🌸', '😊', '😳', '🥺', '💗', '😮', '😔', '🤔', '💪'])      const reactionTag = answer.match(/\[REACCION:([^\]
+]+)\]/u)      let emotion = allowedReactions.has(reactionTag?.[1]?.trim()) ? reactionTag[1].trim() : '🌸'      answer = answer.replace(/\[REACCION:[^\]
+]*\]/gu, '').trim()      if (!answer) throw new Error('El proveedor devolvió una respuesta vacía.')      if (!reactionTag) {        const mood = text.toLowerCase()        if (/triste|llorar|mal día|solo|sola|deprimid/u.test(mood)) emotion = '🥺'        else if (/gracias|hola|buenos días/u.test(mood)) emotion = '😊'        else if (/te quiero|linda|bonita|abrazo/u.test(mood)) emotion = '😳'        else if (/explica|cómo|por qué|ayuda/u.test(mood)) emotion = '🤔'      }      await deliver(sock, msg, answer, pendingKey)      await reactSafely(msg, emotion)
 
       state.history.set(sessionKey, {
         updatedAt: Date.now(),
@@ -389,7 +391,7 @@ export default {
         ].slice(-6)
       })
 
-      await reactSafely(msg, '✔️')
+      
     } catch (error) {
       const report = formatError(error)
 
