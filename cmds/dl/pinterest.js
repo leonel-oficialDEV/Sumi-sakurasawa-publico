@@ -66,7 +66,7 @@ export default {
           const image = await getBuffer(small) || (small !== item.image ? await getBuffer(item.image) : null)
           if (!image) throw new Error('Imagen no disponible')
           const media = await prepareWAMessageMedia({ image }, { upload: sock.waUploadToServer })
-          return { item, media }
+          return { item, media, image }
         }))
         const cards = loaded.filter(r => r.status === 'fulfilled').slice(0, 8).map(({ value: { item, media } }, i) => ({
           header: { title: clean(item.title || text, 60), hasMediaAttachment: true, ...media },
@@ -84,11 +84,21 @@ export default {
             interactiveMessage: {
               body: { text: `📌 *PINTEREST*\n\n🔎 *${clean(text, 80)}*\n\n🖼️ ${cards.length} imágenes · desliza el carrusel` },
               footer: { text: 'Sumi Sakurasawa · toca Abrir pin para verlo en Pinterest' },
-              carouselMessage: { cards, messageVersion: 1 }
+              carouselMessage: { cards, messageVersion: 1 },
+              contextInfo: { isForwarded: false }
             }
           } }
         }, { userJid: sock.user?.id, quoted: msg })
-        await sock.relayMessage(msg.chat, message.message, { messageId: message.key.id })
+        try {
+          await sock.relayMessage(msg.chat, message.message, {
+            messageId: message.key.id,
+            additionalNodes: [{ tag: 'biz', attrs: {}, content: [{ tag: 'interactive', attrs: { type: 'native_flow', v: '1' }, content: [{ tag: 'native_flow', attrs: { name: 'carousel' } }] }] }]
+          })
+        } catch (error) {
+          console.error('[pinterest carousel]', error)
+          await msg.reply('《✧》 No se pudo enviar el carrusel; envío las imágenes como álbum.')
+          await sock.sendAlbumMessage(msg.chat, loaded.filter(r => r.status === 'fulfilled').slice(0, 8).map(({ value: { item, image } }) => ({ type: 'image', data: image, caption: clean(item.title || text, 100) })), { quoted: msg })
+        }
       }
     } catch (e) {
       await msg.reply(`> Ocurrió un error al ejecutar el comando *${usedPrefix + command}*.\n> [Error: *${e.message}*]`)
@@ -103,7 +113,7 @@ async function pinterestDownload(url, evogbUrl, evogbKey, deliriusUrl) {
 
   for (const endpoint of endpoints) {
     try {
-      const r = await fetch(endpoint)
+      const r = await fetch(endpoint, { signal: AbortSignal.timeout(20000) })
       if (!r.ok) continue
       const res = await r.json()
       
@@ -153,7 +163,7 @@ async function pinterestSearch(query, deliriusUrl, vredenUrl) {
 
   for (const endpoint of endpoints) {
     try {
-      const r = await fetch(endpoint)
+      const r = await fetch(endpoint, { signal: AbortSignal.timeout(20000) })
       if (!r.ok) continue
       const res = await r.json()
       if (res?.data?.length) {
