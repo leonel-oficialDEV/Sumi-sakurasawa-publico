@@ -142,7 +142,7 @@ export default {
       const thumb = results.find((r) => r.thumbnail)?.thumbnail
       const Ibuff = thumb ? await getBuffer(thumb).catch(() => null) : null
 
-      const teks2 = results
+      const teks2 = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n` + results
         .map(render)
         .join('\n\n╾۪〬─ ┄۫╌ ׄ┄┈۪ ─〬 ׅ┄╌ ۫┈ ─ׄ─۪〬 ┈ ┄۫╌ ۫┈ ─ׄ─۪〬 ┈ ┄۫╌ ─ׄ〬╼\n\n')
 

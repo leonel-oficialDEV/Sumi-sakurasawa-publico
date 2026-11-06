@@ -150,6 +150,8 @@ export default {
         const data = await downloadTikTok(link)
 
         const lines = [
+          `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}`,
+          '',
           '*TikTok Download*',
           '',
           `*Titulo:* ${data.title || 'Sin titulo'}`,
@@ -185,6 +187,8 @@ export default {
 
       const medias = results.slice(0, 10).map(v => {
         const caption = [
+          `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}`,
+          '',
           '*TikTok Search*',
           '',
           `*Titulo:* ${v.title || 'Sin titulo'}`,

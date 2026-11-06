@@ -177,7 +177,7 @@ async function procesarRespuesta(sock, msg) {
     const safeName = limpiarTexto(registro.titulo) || 'youtube'
     const send = (media) => sock.sendMessage(chatId, isAudio
       ? { audio: media, mimetype: 'audio/mpeg', fileName: `${safeName}.mp3` }
-      : { video: media, mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `➩ ${registro.titulo}\n✎ Calidad: ${result.quality}` }
+      : { video: media, mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ ${registro.titulo}\n✎ Calidad: ${result.quality}` }
       , { quoted: msg })
     try { await send({ url: result.url }) }
     catch {
@@ -227,7 +227,7 @@ export default {
       if (secs && secs > MAX_SECONDS) {
         return sock.sendMessage(chatId, { text: `ꕤ El video dura *${video.timestamp}* y supera el límite de *${MAX_SECONDS / 60} min*.` }, opciones)
       }
-      let informacion = `➩ *${video.title}*\n\n`
+      let informacion = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ *${video.title}*\n\n`
       informacion += `> ❖ Canal › *${video.author?.name || 'Desconocido'}*\n`
       informacion += `> ⴵ Duración › *${video.timestamp || formatearDuracion(secs)}*\n`
       informacion += `> ❀ Vistas › *${Number(video.views || 0).toLocaleString()}*\n`
@@ -256,15 +256,15 @@ export default {
         if (!result) throw new Error('No se pudo convertir el video.')
         const safeName = limpiarTexto(video.title) || 'youtube'
         try {
-          await sock.sendMessage(chatId, { video: { url: result.url }, mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `➩ ${video.title}\n✎ Calidad: ${result.quality}` }, opciones)
+          await sock.sendMessage(chatId, { video: { url: result.url }, mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ ${video.title}\n✎ Calidad: ${result.quality}` }, opciones)
         } catch {
           const res = await cnv.get(result.url, { responseType: 'arraybuffer', timeout: 180000 })
-          await sock.sendMessage(chatId, { video: Buffer.from(res.data), mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `➩ ${video.title}` }, opciones)
+          await sock.sendMessage(chatId, { video: Buffer.from(res.data), mimetype: 'video/mp4', fileName: `${safeName}.mp4`, caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ ${video.title}` }, opciones)
         }
         await sock.sendMessage(chatId, { react: { text: '✅', key: msg.key } })
         return
       }
-      let infoSelect = `➩ Descargando › ${video.title}\n\n`
+      let infoSelect = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➩ Descargando › ${video.title}\n\n`
       infoSelect += `> ❖ Canal › *${video.author?.name || 'Desconocido'}*\n`
       infoSelect += `> ⴵ Duración › *${video.timestamp || formatearDuracion(secs)}*\n`
       infoSelect += `> ❀ Vistas › *${Number(video.views || 0).toLocaleString()}*\n`

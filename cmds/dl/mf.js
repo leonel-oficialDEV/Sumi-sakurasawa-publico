@@ -20,7 +20,7 @@ export default {
 
       const { filename, filetype, filesize, uploaded, download } = json.result;
 
-      let info = `˚ʚ♡ɞ₊ *MEDIAFIRE - DL* ෆ╹ .̮ ╹ෆ\n\n`;
+      let info = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n˚ʚ♡ɞ₊ *MEDIAFIRE - DL* ෆ╹ .̮ ╹ෆ\n\n`;
       info += `➩ Descargando › *${filename}*\n`;
       info += `> ❖ Tipo › *${filetype}*\n`;
       info += `> ❖ Tamaño › *${filesize}*\n`;

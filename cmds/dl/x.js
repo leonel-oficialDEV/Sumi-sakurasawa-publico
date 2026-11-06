@@ -21,7 +21,7 @@ export default {
     try {
       const data = await getTwitterMedia(args[0])
       if (!data) return msg.reply('《✧》 No se pudo obtener el contenido.')
-      const caption = `ㅤ۟∩　ׅ　★ ໌　ׅ　🅣witter 🅓ownload　ׄᰙ\n\n${data.title? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Título* › ${data.title}\n` : ''}${data.author? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Autor* › ${data.author}\n` : ''}${data.date? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Fecha* › ${data.date}\n` : ''}${data.duration? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Duración* › ${data.duration}\n` : ''}${data.resolution? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Resolución* › ${data.resolution}\n` : ''}${data.views? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Vistas* › ${data.views}\n` : ''}${data.likes? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Likes* › ${data.likes}\n` : ''}${data.comments? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Comentarios* › ${data.comments}\n` : ''}${data.retweets? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Retweets* › ${data.retweets}\n` : ''}𖣣ֶㅤ֯⌗ ❀ ⬭ *Enlace* › ${args[0]}`
+      const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\nㅤ۟∩　ׅ　★ ໌　ׅ　🅣witter 🅓ownload　ׄᰙ\n\n${data.title? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Título* › ${data.title}\n` : ''}${data.author? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Autor* › ${data.author}\n` : ''}${data.date? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Fecha* › ${data.date}\n` : ''}${data.duration? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Duración* › ${data.duration}\n` : ''}${data.resolution? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Resolución* › ${data.resolution}\n` : ''}${data.views? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Vistas* › ${data.views}\n` : ''}${data.likes? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Likes* › ${data.likes}\n` : ''}${data.comments? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Comentarios* › ${data.comments}\n` : ''}${data.retweets? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Retweets* › ${data.retweets}\n` : ''}𖣣ֶㅤ֯⌗ ❀ ⬭ *Enlace* › ${args[0]}`
       if (data.type === 'video') {
         const tmpDir = os.tmpdir()
         const inputPath = path.join(tmpDir, `twitter_${Date.now()}_in.mp4`)

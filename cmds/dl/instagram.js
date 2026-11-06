@@ -20,7 +20,7 @@ export default {
       const meta = data.meta
       const isAllPhotos = data.medias.every(m => m.type!== 'video')
       if (data.medias.length > 1) {
-        const captionAlbum = `ㅤ۟∩　ׅ　★ ໌　ׅ　🅘𝖦 🅓ownload　ׄᰙ\n\n${meta.title? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Usuario* › ${meta.title}\n` : ''}${meta.caption? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Descripción* › ${meta.caption.slice(0, 400)}\n` : ''}${meta.like? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Likes* › ${meta.like}\n` : ''}${meta.views? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Vistas* › ${meta.views}\n` : ''}𖣣ֶㅤ֯⌗ ❀ ⬭ *Archivos* › ${data.medias.length}\n𖣣ֶㅤ֯⌗ ❀ ⬭ *Enlace* › ${args[0]}`.trim()
+        const captionAlbum = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\nㅤ۟∩　ׅ　★ ໌　ׅ　🅘𝖦 🅓ownload　ׄᰙ\n\n${meta.title? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Usuario* › ${meta.title}\n` : ''}${meta.caption? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Descripción* › ${meta.caption.slice(0, 400)}\n` : ''}${meta.like? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Likes* › ${meta.like}\n` : ''}${meta.views? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Vistas* › ${meta.views}\n` : ''}𖣣ֶㅤ֯⌗ ❀ ⬭ *Archivos* › ${data.medias.length}\n𖣣ֶㅤ֯⌗ ❀ ⬭ *Enlace* › ${args[0]}`.trim()
         const albumMedias = data.medias.map((m, i) => ({
           type: m.type === 'video'? 'video' : 'image',
           data: { url: m.url },
@@ -40,7 +40,7 @@ export default {
         }
         return
       }
-      const caption = `ㅤ۟∩　ׅ　★ ໌　ׅ　🅘𝖦 🅓ownload　ׄᰙ\n\n${meta.title? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Usuario* › ${meta.title}\n` : ''}${meta.caption? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Descripción* › ${meta.caption}\n` : ''}${meta.like? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Likes* › ${meta.like}\n` : ''}${meta.views? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Vistas* › ${meta.views}\n` : ''}${meta.duration? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Duración* › ${meta.duration}\n` : ''}${meta.format? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Formato* › ${meta.format}\n` : ''}𖣣ֶㅤ֯⌗ ❀ ⬭ *Enlace* › ${args[0]}`
+      const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\nㅤ۟∩　ׅ　★ ໌　ׅ　🅘𝖦 🅓ownload　ׄᰙ\n\n${meta.title? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Usuario* › ${meta.title}\n` : ''}${meta.caption? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Descripción* › ${meta.caption}\n` : ''}${meta.like? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Likes* › ${meta.like}\n` : ''}${meta.views? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Vistas* › ${meta.views}\n` : ''}${meta.duration? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Duración* › ${meta.duration}\n` : ''}${meta.format? `𖣣ֶㅤ֯⌗ ❀ ⬭ *Formato* › ${meta.format}\n` : ''}𖣣ֶㅤ֯⌗ ❀ ⬭ *Enlace* › ${args[0]}`
       const m = data.medias[0]
       if (m.type === 'video') {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ig-'))

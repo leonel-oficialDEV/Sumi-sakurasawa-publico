@@ -34,7 +34,7 @@ export default {
         ? 'Desconocida'
         : songInfo.duration || ""
 
-      const caption = `➪ Descargando › ${songInfo.title || songInfo.name}
+      const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n➪ Descargando › ${songInfo.title || songInfo.name}
 
 > ✿⃘࣪◌ ֪ Artista › ${songInfo.artist || ""}
 > ✿⃘࣪◌ ֪ Álbum › ${songInfo.album || ""}

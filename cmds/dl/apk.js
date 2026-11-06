@@ -22,10 +22,10 @@ export default {
         }
 
         const sizeBytes = parseSize(mfData.size)
-        const caption = `✰ ᩧ 𓈒 ׄ Mediafire Directo  ׅ ✿\n\n➩ *Nombre ›* ${mfData.name}\n☆ *Tamaño ›* ${mfData.size}\n🔗 *Enlace ›* ${mfData.link}`
+        const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n✰ ᩧ 𓈒 ׄ Mediafire Directo  ׅ ✿\n\n➩ *Nombre ›* ${mfData.name}\n☆ *Tamaño ›* ${mfData.size}\n🔗 *Enlace ›* ${mfData.link}`
 
         if (sizeBytes > 524288000) {
-          return sock.sendMessage(msg.chat, { text: `《✧》 El archivo supera el límite (500 MB) con un tamaño de ${mfData.size}.\n> Descárgalo directamente aquí:\n${mfData.link}` }, options)
+          return sock.sendMessage(msg.chat, { text: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n《✧》 El archivo supera el límite (500 MB) con un tamaño de ${mfData.size}.\n> Descárgalo directamente aquí:\n${mfData.link}` }, options)
         }
 
         return await sock.sendMessage(msg.chat, {
@@ -39,10 +39,10 @@ export default {
       const mfSearch = await searchMediafireQuery(query)
       if (mfSearch && mfSearch.link) {
         const sizeBytes = parseSize(mfSearch.size)
-        const caption = `✰ ᩧ 𓈒 ׄ{ Búsqueda Mediafire APK } ׅ ✿\n\n➩ *Nombre ›* ${mfSearch.name}\n☆ *Tamaño ›* ${mfSearch.size}\n🔗 *Descarga Directa ›* ${mfSearch.link}\n🌐 *Fuente ›* ${mfSearch.sourceUrl}`
+        const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n✰ ᩧ 𓈒 ׄ{ Búsqueda Mediafire APK } ׅ ✿\n\n➩ *Nombre ›* ${mfSearch.name}\n☆ *Tamaño ›* ${mfSearch.size}\n🔗 *Descarga Directa ›* ${mfSearch.link}\n🌐 *Fuente ›* ${mfSearch.sourceUrl}`
 
         if (sizeBytes > 524288000) {
-          return sock.sendMessage(msg.chat, { text: `《✧》 El archivo supera el límite (${mfSearch.size}).\n> Descárgalo directamente aquí:\n${mfSearch.link}` }, options)
+          return sock.sendMessage(msg.chat, { text: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n《✧》 El archivo supera el límite (${mfSearch.size}).\n> Descárgalo directamente aquí:\n${mfSearch.link}` }, options)
         }
 
         return await sock.sendMessage(msg.chat, {
@@ -57,10 +57,10 @@ export default {
 
       if (apkInfo && apkInfo.downloadUrl) {
         const formattedSize = formatBytes(apkInfo.size)
-        const caption = `✰ ᩧ 𓈒 ׄ Aptoide Downloader  ׅ ✿\n\n➩ *Nombre ›* ${apkInfo.name}\n❖ *Paquete ›* ${apkInfo.package}\n🏢 *Desarrollador ›* ${apkInfo.developer}\n✿ *Última actualización ›* ${apkInfo.lastup}\n☆ *Tamaño ›* ${formattedSize}\n🔗 *Fuente ›* ${apkInfo.downloadUrl}`
+        const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n✰ ᩧ 𓈒 ׄ Aptoide Downloader  ׅ ✿\n\n➩ *Nombre ›* ${apkInfo.name}\n❖ *Paquete ›* ${apkInfo.package}\n🏢 *Desarrollador ›* ${apkInfo.developer}\n✿ *Última actualización ›* ${apkInfo.lastup}\n☆ *Tamaño ›* ${formattedSize}\n🔗 *Fuente ›* ${apkInfo.downloadUrl}`
 
         if (apkInfo.size > 524288000) {
-          return sock.sendMessage(msg.chat, { text: `《✧》 El archivo es demasiado grande (${formattedSize}).\n> Descárgalo directamente aquí:\n${apkInfo.downloadUrl}` }, options)
+          return sock.sendMessage(msg.chat, { text: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\n《✧》 El archivo es demasiado grande (${formattedSize}).\n> Descárgalo directamente aquí:\n${apkInfo.downloadUrl}` }, options)
         }
 
         return await sock.sendMessage(msg.chat, {
