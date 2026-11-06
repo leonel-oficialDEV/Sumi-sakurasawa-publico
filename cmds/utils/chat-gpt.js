@@ -36,11 +36,68 @@ function pruneState() {
   }
 }
 
+function redactSecrets(value) {
+  let text = String(value ?? '')
+
+  const secrets = [
+    globalThis.APIs?.yuki?.key,
+    globalThis.APIs?.delirius?.key
+  ].filter(value => typeof value === 'string' && value.length > 0)
+
+  for (const secret of secrets) {
+    text = text.split(secret).join('[CLAVE OCULTA]')
+    text = text.split(encodeURIComponent(secret)).join('[CLAVE OCULTA]')
+  }
+
+  return text
+    .replace(
+      /((?:authorization|api[_-]?key|access[_-]?token|token|password|secret)["']?\s*[:=]\s*["']?)([^"'\s&,}\n]+)/gi,
+      '$1[OCULTO]'
+    )
+    .replace(
+      /([?&](?:key|apikey|api_key|token|access_token)=)[^&\s]+/gi,
+      '$1[OCULTO]'
+    )
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [OCULTO]')
+}
+
+function stringifyBody(data) {
+  if (data === undefined || data === null) return '[Vacía]'
+  if (typeof data === 'string') return data
+
+  try {
+    return JSON.stringify(data, null, 2)
+  } catch {
+    return '[No se pudo convertir la respuesta a texto]'
+  }
+}
+
+function formatAIError(provider, error, includeStack = false) {
+  const lines = [
+    `Proveedor: ${provider}`,
+    `Tipo: ${error.name ?? 'Error'}`,
+    `HTTP: ${error.response?.status ?? 'Sin respuesta HTTP'}`,
+    `Código: ${error.code ?? 'Sin código'}`,
+    `Mensaje: ${error.message ?? 'Sin mensaje'}`,
+    `Respuesta del servidor:\n${stringifyBody(error.response?.data)}`
+  ]
+
+  if (includeStack && error.stack) {
+    lines.push(`Traza:\n${error.stack}`)
+  }
+
+  return redactSecrets(lines.join('\n')).slice(0, 3500)
+}
+
 function extractText(data) {
   if (typeof data === 'string') {
     const value = data.trim()
+
+    if (!value) return null
+    if (/^error\b/i.test(value)) return null
     if (/^<!doctype|^<html/i.test(value)) return null
-    return value || null
+
+    return value
   }
 
   const candidates = [
@@ -117,6 +174,8 @@ Responde únicamente al mensaje actual, sin anteponer etiquetas de rol.
 }
 
 async function queryAI(text, prompt, userKey) {
+  const errors = []
+
   const providers = [
     {
       name: 'Siputzx',
@@ -154,6 +213,8 @@ async function queryAI(text, prompt, userKey) {
         }
       )
     })
+  } else {
+    errors.push('Yuki: omitido porque falta configurar su URL o su clave.')
   }
 
   const delirius = globalThis.APIs?.delirius
@@ -170,6 +231,8 @@ async function queryAI(text, prompt, userKey) {
         }
       )
     })
+  } else {
+    errors.push('Delirius: omitido porque falta configurar su URL.')
   }
 
   for (const provider of providers) {
@@ -181,17 +244,69 @@ async function queryAI(text, prompt, userKey) {
         return answer.slice(0, MAX_REPLY)
       }
 
-      console.warn(`[Sumi IA] ${provider.name}: respuesta sin texto válido`)
+      const detail = formatAIError(provider.name, {
+        name: 'InvalidAIResponse',
+        message: 'El servidor respondió, pero no encontré texto válido.',
+        code: 'INVALID_AI_RESPONSE',
+        response
+      })
+
+      errors.push(detail)
+      console.warn(`[Sumi IA]\n${detail}`)
     } catch (error) {
-      console.warn(
-        `[Sumi IA] ${provider.name}:`,
-        `estado=${error.response?.status ?? 'sin respuesta'}`,
-        `codigo=${error.code ?? 'desconocido'}`
-      )
+      const detail = formatAIError(provider.name, error)
+
+      errors.push(detail)
+      console.warn(`[Sumi IA]\n${detail}`)
     }
   }
 
-  throw new Error('AI_PROVIDERS_UNAVAILABLE')
+  const error = new Error('AI_PROVIDERS_UNAVAILABLE')
+  error.debugDetails = errors.join('\n\n────────────────\n\n')
+
+  throw error
+}
+
+async function reactSafely(msg, emoji) {
+  try {
+    if (typeof msg.react === 'function') {
+      await msg.react(emoji)
+    }
+  } catch {}
+}
+
+async function deliverText(sock, msg, text, pendingKey) {
+  let editError
+
+  if (pendingKey) {
+    try {
+      await sock.sendMessage(msg.chat, {
+        text,
+        edit: pendingKey
+      })
+
+      return
+    } catch (error) {
+      editError = error
+    }
+  }
+
+  try {
+    await sock.sendMessage(
+      msg.chat,
+      { text },
+      { quoted: msg }
+    )
+  } catch (error) {
+    if (editError) {
+      error.debugDetails = [
+        formatAIError('WhatsApp: editar mensaje', editError, true),
+        formatAIError('WhatsApp: enviar mensaje', error, true)
+      ].join('\n\n────────────────\n\n')
+    }
+
+    throw error
+  }
 }
 
 export default {
@@ -200,50 +315,62 @@ export default {
   description: 'Conversa con Sumi IA',
   uso: 'mensaje | reset',
   run: async ({ msg, sock, args, usedPrefix, command }) => {
-    pruneState()
-
-    const sender = normalizeJid(msg.sender)
-    const botId = normalizeJid(sock.user?.id)
-    const sessionKey = `\({botId}|\){msg.chat}|${sender}`
-    const userKey = `\({botId}|\){sender}`
-    const text = (args ?? []).join(' ').trim()
-    const invocation = `\({usedPrefix ?? '.'}\){command ?? 'ia'}`
-
-    if (!text) {
-      return msg.reply(
-        `ꕥ Soy *${BOT_NAME}*. ¿Qué quieres conversar?\n\n` +
-        `*Ejemplo:* ${invocation} explícame las promesas en JavaScript\n` +
-        `*Borrar conversación:* ${invocation} reset`
-      )
-    }
-
-    if (state.busy.has(userKey)) {
-      return msg.reply('ꕥ Todavía estoy respondiendo tu mensaje anterior.')
-    }
-
-    if (/^(reset|reiniciar|olvidar)$/i.test(text)) {
-      state.history.delete(sessionKey)
-      return msg.reply('ꕥ Listo, borré el historial de esta conversación.')
-    }
-
-    if (text.length > MAX_INPUT) {
-      return msg.reply(
-        `ꕥ Ese mensaje es muy largo. Envíame hasta ${MAX_INPUT} caracteres por consulta.`
-      )
-    }
-
-    const elapsed = Date.now() - (state.cooldowns.get(userKey) ?? 0)
-
-    if (elapsed < COOLDOWN) {
-      return msg.reply('ꕥ Espera unos segundos antes de enviarme otra consulta.')
-    }
-
-    state.busy.add(userKey)
-    state.cooldowns.set(userKey, Date.now())
-
     let pendingKey
+    let userKey
+    let locked = false
 
     try {
+      pruneState()
+
+      const sender = normalizeJid(msg.sender)
+      const botId = normalizeJid(sock.user?.id)
+      const sessionKey = `\({botId}|\){msg.chat}|${sender}`
+
+      userKey = `\({botId}|\){sender}`
+
+      const text = (args ?? []).join(' ').trim()
+      const invocation = `\({usedPrefix ?? '.'}\){command ?? 'ia'}`
+
+      if (!text) {
+        return await msg.reply(
+          `ꕥ Soy *${BOT_NAME}*. ¿Qué quieres conversar?\n\n` +
+          `*Ejemplo:* ${invocation} explícame las promesas en JavaScript\n` +
+          `*Borrar conversación:* ${invocation} reset`
+        )
+      }
+
+      if (state.busy.has(userKey)) {
+        return await msg.reply(
+          'ꕥ Todavía estoy respondiendo tu mensaje anterior.'
+        )
+      }
+
+      if (/^(reset|reiniciar|olvidar)$/i.test(text)) {
+        state.history.delete(sessionKey)
+
+        return await msg.reply(
+          'ꕥ Listo, borré el historial de esta conversación.'
+        )
+      }
+
+      if (text.length > MAX_INPUT) {
+        return await msg.reply(
+          `ꕥ Ese mensaje es muy largo. Envíame hasta ${MAX_INPUT} caracteres por consulta.`
+        )
+      }
+
+      const elapsed = Date.now() - (state.cooldowns.get(userKey) ?? 0)
+
+      if (elapsed < COOLDOWN) {
+        return await msg.reply(
+          'ꕥ Espera unos segundos antes de enviarme otra consulta.'
+        )
+      }
+
+      state.busy.add(userKey)
+      state.cooldowns.set(userKey, Date.now())
+      locked = true
+
       const user = await db.getUser(msg.sender)
       const username = String(user?.name || msg.pushName || 'usuario')
         .replace(/[\r\n]+/g, ' ')
@@ -261,33 +388,11 @@ export default {
 
       pendingKey = pending?.key
 
-      if (typeof msg.react === 'function') {
-        await msg.react('🕒').catch(() => {})
-      }
+      await reactSafely(msg, '🕒')
 
       const answer = await queryAI(text, prompt, sessionKey)
 
-      let delivered = false
-
-      if (pendingKey) {
-        try {
-          await sock.sendMessage(msg.chat, {
-            text: answer,
-            edit: pendingKey
-          })
-          delivered = true
-        } catch {
-          console.warn('[Sumi IA] No se pudo editar el mensaje de espera')
-        }
-      }
-
-      if (!delivered) {
-        await sock.sendMessage(
-          msg.chat,
-          { text: answer },
-          { quoted: msg }
-        )
-      }
+      await deliverText(sock, msg, answer, pendingKey)
 
       state.history.set(sessionKey, {
         updatedAt: Date.now(),
@@ -298,43 +403,45 @@ export default {
         ].slice(-8)
       })
 
-      if (typeof msg.react === 'function') {
-        await msg.react('✔️').catch(() => {})
-      }
+      await reactSafely(msg, '✔️')
     } catch (error) {
-      console.error(
-        '[Sumi IA]',
-        error.message === 'AI_PROVIDERS_UNAVAILABLE'
-          ? 'Ningún proveedor devolvió una respuesta válida'
-          : `${error.name}: fallo al procesar el comando`
+      const detail = redactSecrets(
+        error.debugDetails || formatAIError('Plugin Sumi', error, true)
       )
 
-      const failure = error.message === 'AI_PROVIDERS_UNAVAILABLE'
-        ? 'ꕥ No pude conectar con los servicios de IA. Intenta más tarde.'
-        : 'ꕥ Ocurrió un problema al procesar tu mensaje. Revisa la consola del bot.'
+      console.error(`[Sumi IA]\n${detail}`)
 
-      let updated = false
+      const failure = [
+        'ꕥ *SUMI · REPORTE DE ERROR*',
+        '',
+        detail,
+        '',
+        'Copia este reporte para revisar el fallo.'
+      ].join('\n').slice(0, 14000)
 
-      if (pendingKey) {
+      try {
+        await deliverText(sock, msg, failure, pendingKey)
+      } catch (sendError) {
+        const sendDetail = formatAIError(
+          'WhatsApp: enviar reporte',
+          sendError,
+          true
+        )
+
+        console.error(`[Sumi IA]\n${sendDetail}`)
+
         try {
-          await sock.sendMessage(msg.chat, {
-            text: failure,
-            edit: pendingKey
-          })
-          updated = true
+          await msg.reply(
+            `\({failure}\n\n\){sendDetail}`.slice(0, 16000)
+          )
         } catch {}
       }
 
-      if (!updated) {
-        await msg.reply(failure)
-      }
-
-      if (typeof msg.react === 'function') {
-        await msg.react('❌').catch(() => {})
-      }
+      await reactSafely(msg, '❌')
     } finally {
-      state.busy.delete(userKey)
+      if (locked && userKey) {
+        state.busy.delete(userKey)
+      }
     }
   }
-}
-  
+      }
