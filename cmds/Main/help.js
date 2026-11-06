@@ -58,7 +58,7 @@ export default {
       const sinPrefijo = /^(help|menu)$/i.test(usedPrefix)
       const cfg = botSettings.prefijo
       const prefix = sinPrefijo ? (Array.isArray(cfg) ? cfg[0] : typeof cfg === 'string' ? cfg : '') : usedPrefix
-      const link = 'https://chat.whatsapp.com/CC35aSwNsPsHYKkGsFE9Cp'
+      const link = 'https://chat.whatsapp.com/CC35aSwNsPsHYKkGsFE9Cp?s=cl&p=a&mlu=4&ilr=4&iam=2'
       const isOficialBot = botId === (global?.sock?.user?.id?.split(':')[0] + '@s.whatsapp.net')
       const botType = isOficialBot ? 'Owner' : 'Sub Bot'
       const platform = `${os.type()} ${os.release()} ${os.arch()}`
@@ -74,8 +74,8 @@ export default {
       `: ̗̀☄︎ *sɪsᴛᴇᴍᴀ/ᴏᴘʀ ::* ${platform}\n\n` +
       `: ̗̀❖ *ᴜsᴇʀs ::* ${(Object.keys(userr).length || 0).toLocaleString()}\n` +
       `: ̗̀❖ *ᴍɪ ᴛɪᴇᴍᴘᴏ ::* ${botTime} (Colombia)\n` +
-      `: ̗̀❖ *ᴜʀʟ ::* ${link}\n` +
-      `: ̗̀❖ *Canal de novedades:* ${global.links.channel}\n\n` +
+      `: ̗̀❖ *Canal de novedades:* ${global.links.channel}\n` +
+      `: ̗̀❖ *ᴜʀʟ ::* ${link}\n\n` +
       ` ⌒࣪᷼⏜͡ ۪ ࿚ꨪᰰ࿙ ࣭࣪⢏࣭۟⢢࣭ׄ᎐፝֟᎐࣭ׄ⡔࣭۟⡹࣭ׄ ࿚ꨪᰰ࿙ ۪ ͡⏜ׄ᷼⌒\n\n` +
       `⋆｡ﾟ☁ ｡° *ᴄᴏᴍ꯭ᴀ꯭ɴᴅᴏs* ﾟ｡˚₊ 𓂃\n`
 
