@@ -7,6 +7,27 @@ import db from '#db';
 const rollLocks = new Map();
 const STATS_FILE_PATH = path.join(process.cwd(), 'lib', 'character_stats.json');
 
+const EVO_KEY = 'Apex-Predator2010';
+
+const imageCache = new Map();
+
+const IMG_EXT = /\.(jpe?g|png|webp)(\?.*)?$/i;
+const JUNK_DOMAINS = /(adobe|shutterstock|alamy|istockphoto|gettyimages|dreamstime|123rf|depositphotos|stock\.|ticketmaster|facebook|instagram|youtube|ytimg|amazon|ebay|etsy)/i;
+
+const RARITY_RANGE = {
+  'Común': [100, 200],
+  'Poco Común': [200, 500],
+  'Raro': [500, 1000],
+  'Épico': [1000, 2500],
+  'Legendario': [2500, 5000],
+  'Mítico': [5000, 10000]
+};
+
+function randomInRange(min, max) {
+  const value = Math.floor(Math.random() * (max - min + 1)) + min;
+  return Math.round(value / 10) * 10;
+}
+
 function cleanOldLocks() {
   const now = Date.now();
   for (const [userId, lockTime] of rollLocks.entries()) {
@@ -24,7 +45,24 @@ function normalizeStr(str) {
     .trim();
 }
 
-// Carga del sistema Gacha y su función de probabilidad
+function toTag(s) {
+  return normalizeStr(s).replace(/\s+/g, '_');
+}
+
+function cleanSeriesName(serie) {
+  const original = String(serie || '').trim();
+  const cleaned = original
+    .replace(/\s*\(.*?\)\s*/g, ' ')
+    .replace(/\s+(manga|anime)(\s+(y|and|e|&)\s+(manga|anime))?\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || original;
+}
+
+function shuffle(arr) {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
 async function getGachaSystem() {
   const filePath = path.join(process.cwd(), 'lib', 'characters.js');
   try {
@@ -72,19 +110,15 @@ async function setCharacterStat(id, val) {
   await fs.writeFile(STATS_FILE_PATH, JSON.stringify(json, null, 2));
 }
 
-// Clasificación por tus 8 Rarezas exactas según valor económico
 function getRarityByValue(val) {
-  if (val >= 10000000) return { name: 'Secreto', color: '🌌' };
-  if (val >= 2000000) return { name: 'Mítico', color: '🔴' };
-  if (val >= 750000) return { name: 'Legendario', color: '🟡' };
-  if (val >= 250000) return { name: 'Épico', color: '🟣' };
-  if (val >= 90000) return { name: 'Muy Raro', color: '🔷' };
-  if (val >= 30000) return { name: 'Raro', color: '🔵' };
-  if (val >= 10000) return { name: 'Poco Común', color: '🟢' };
+  if (val >= 5000) return { name: 'Mítico', color: '🔴' };
+  if (val >= 2500) return { name: 'Legendario', color: '🟡' };
+  if (val >= 1000) return { name: 'Épico', color: '🟣' };
+  if (val >= 500) return { name: 'Raro', color: '🔵' };
+  if (val >= 200) return { name: 'Poco Común', color: '🟢' };
   return { name: 'Común', color: '⚪' };
 }
 
-// Detección de texto de Rareza asignada directamente
 function getCharacterRarity(character, chatChar, finalValue) {
   const rawRarity = chatChar?.rareza || chatChar?.rarity || chatChar?.clase || character?.rareza || character?.rarity || character?.clase || character?.tier;
 
@@ -92,11 +126,9 @@ function getCharacterRarity(character, chatChar, finalValue) {
     const cleanRar = String(rawRarity).trim();
     const lowerRar = cleanRar.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    if (lowerRar.includes('secreto')) return { name: 'Secreto', color: '🌌' };
-    if (lowerRar.includes('mitico')) return { name: 'Mítico', color: '🔴' };
+    if (lowerRar.includes('secreto') || lowerRar.includes('mitico')) return { name: 'Mítico', color: '🔴' };
     if (lowerRar.includes('legendario') || lowerRar.includes('leyenda')) return { name: 'Legendario', color: '🟡' };
     if (lowerRar.includes('epico') || lowerRar.includes('especial')) return { name: 'Épico', color: '🟣' };
-    if (lowerRar.includes('muy raro')) return { name: 'Muy Raro', color: '🔷' };
     if (lowerRar.includes('raro')) return { name: 'Raro', color: '🔵' };
     if (lowerRar.includes('poco')) return { name: 'Poco Común', color: '🟢' };
     if (lowerRar.includes('comun')) return { name: 'Común', color: '⚪' };
@@ -106,52 +138,111 @@ function getCharacterRarity(character, chatChar, finalValue) {
   return getRarityByValue(finalValue);
 }
 
-async function buscarImagenPersonaje(nombre, serie) {
-  const cleanName = nombre.replace(/\s*\(.*?\)\s*/g, '').trim();
-  const cleanSeries = (serie && serie !== 'Desconocido') ? serie.trim() : 'anime';
-  const booruTag = cleanName.replace(/\s+/g, '_').toLowerCase();
-  let results = [];
+async function getJson(url, timeout = 3500) {
+  const { data } = await axios.get(url, { timeout });
+  return data;
+}
 
-  try {
-    const { data } = await axios.get(`https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&tags=${encodeURIComponent(booruTag)}`, { timeout: 4000 });
-    if (Array.isArray(data) && data.length > 0) {
-      results = data.map(p => `https://safebooru.org/images/${p.directory}/${p.image}`);
-      if (results.length > 0) return results;
-    }
-  } catch {}
+async function fetchBooru(site, tags) {
+  const q = encodeURIComponent(tags);
+  if (site === 'safebooru') {
+    const data = await getJson(`https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&limit=40&tags=${q}`);
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter(p => p.directory && p.image && IMG_EXT.test(p.image))
+      .map(p => `https://safebooru.org/images/${p.directory}/${p.image}`);
+  }
+  const data = await getJson(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&limit=40&tags=${q}`);
+  return (data?.post || [])
+    .map(p => p.file_url)
+    .filter(u => typeof u === 'string' && IMG_EXT.test(u));
+}
 
-  try {
-    const { data } = await axios.get(`https://gelbooru.com/index.php?page=dapi&s=post&q=index&json=1&tags=${encodeURIComponent(booruTag)}+rating:general`, { timeout: 4000 });
-    if (data?.post?.length > 0) {
-      results = data.post.map(p => p.file_url);
-      if (results.length > 0) return results;
-    }
-  } catch {}
-
-  const queries = [
-    `${cleanName} ${cleanSeries} anime`.trim(),
-    `${cleanName} ${cleanSeries} character`.trim()
-  ];
-
-  for (const query of queries) {
-    const endpoints = [
-      `https://api.evogb.org/search/pinterest?query=${encodeURIComponent(query)}&apikey=Mai301520-art`,
-      `https://api.delirius.online/search/pinterestv2?text=${encodeURIComponent(query)}`,
-      `https://bk9.fun/search/gimage?q=${encodeURIComponent(query)}`
-    ];
-
-    for (const ep of endpoints) {
-      try {
-        const { data } = await axios.get(ep, { timeout: 4000 });
-        const items = data?.data || data?.result || data?.results || data;
-        if (Array.isArray(items) && items.length > 0) {
-          results = items.map(i => i?.hd || i?.image_url || i?.url || i?.image || i?.link).filter(url => typeof url === 'string' && /^https?:\/\//i.test(url));
-          if (results.length > 0) return results;
-        }
-      } catch {}
+async function searchBooru(nameTags, seriesTag) {
+  const bases = [];
+  for (const nameTag of nameTags) {
+    if (seriesTag) {
+      bases.push(`${nameTag}_(${seriesTag})`, `${nameTag}_(${seriesTag.replace(/_/g, '')})`);
+    } else {
+      bases.push(nameTag);
     }
   }
-  return results;
+
+  const jobs = [];
+  for (const base of bases) {
+    for (const extra of ['solo', '']) {
+      for (const site of ['safebooru', 'gelbooru']) {
+        const tags = `${base} ${extra} rating:general`.replace(/\s+/g, ' ').trim();
+        jobs.push(fetchBooru(site, tags).catch(() => []));
+      }
+    }
+  }
+
+  const results = await Promise.all(jobs);
+  const first = results.find(r => r.length);
+  return first ? shuffle(first) : [];
+}
+
+function parseImageItems(data) {
+  const items = data?.data || data?.result || data?.results || data;
+  if (!Array.isArray(items)) return [];
+  return items
+    .map(i => (typeof i === 'string' ? i : i?.hd || i?.image_url || i?.url || i?.image || i?.link))
+    .filter(u => typeof u === 'string' && /^https?:\/\//i.test(u) && !JUNK_DOMAINS.test(u));
+}
+
+async function searchEvo(name, series) {
+  const query = `${name} ${series || 'anime'} anime character`.trim();
+  const q = encodeURIComponent(query);
+  const endpoints = [
+    `https://api.evogb.org/search/pinterest?query=${q}&apikey=${EVO_KEY}`,
+    `https://api.evogb.org/search/googleimage?query=${q}&apikey=${EVO_KEY}`
+  ];
+
+  const results = await Promise.all(
+    endpoints.map(ep => getJson(ep, 4500).then(parseImageItems).catch(() => []))
+  );
+  return [...new Set(results.flat())].slice(0, 12);
+}
+
+async function buscarImagenPersonaje(nombre, serie, keyword) {
+  const cleanName = nombre.replace(/\s*\(.*?\)\s*/g, '').trim();
+  const alias = (nombre.match(/\(([^)]+)\)/) || [])[1] || '';
+  const hasSeries = serie && serie !== 'Desconocido';
+  const seriesClean = hasSeries ? cleanSeriesName(serie) : '';
+  const seriesTag = hasSeries ? toTag(seriesClean) : '';
+
+  const nameTags = [...new Set([toTag(cleanName), toTag(keyword), toTag(alias)].filter(Boolean))].slice(0, 3);
+
+  const booru = await searchBooru(nameTags, seriesTag);
+  if (booru.length) return booru;
+
+  return await searchEvo(cleanName, seriesClean);
+}
+
+async function descargarPrimera(urls) {
+  const chunkSize = 4;
+  for (let i = 0; i < urls.length && i < 12; i += chunkSize) {
+    const chunk = urls.slice(i, i + chunkSize);
+    try {
+      return await Promise.any(
+        chunk.map(async url => {
+          const res = await axios.get(url, {
+            responseType: 'arraybuffer',
+            timeout: 6000,
+            maxContentLength: 8 * 1024 * 1024,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+          });
+          const type = String(res.headers?.['content-type'] || '');
+          if (!type.startsWith('image/') || !res.data || res.data.byteLength < 1000) {
+            throw new Error('imagen inválida');
+          }
+          return { buffer: Buffer.from(res.data), url };
+        })
+      );
+    } catch {}
+  }
+  return null;
 }
 
 export default {
@@ -176,9 +267,9 @@ export default {
       if (!db.data) db.data = {};
       if (!db.data.chats) db.data.chats = {};
       if (!db.data.chats[chatId]) db.data.chats[chatId] = {};
-      let chat = db.getChat ? db.getChat(chatId) : db.data.chats[chatId];
 
-      if (chat?.adminonly || chat?.gacha === false) {
+      const chat = db.getChat(msg.chat);
+      if (chat?.adminonly || !chat?.gacha) {
         return msg.reply(`ꕥ Los comandos de *Gacha* están desactivados en este grupo.\n\nUn *administrador* puede activarlos con el comando:\n» *${usedPrefix}gacha on*`);
       }
 
@@ -205,7 +296,6 @@ export default {
         return msg.reply(`ꕥ No se encontraron personajes cargados en la base de datos.`);
       }
 
-      // Usa la función probabilística de lib/characters.js si existe; de lo contrario, elige uno al azar
       const character = getRandom ? getRandom() : dbChars[Math.floor(Math.random() * dbChars.length)];
       if (!character) {
         rollLocks.delete(userId);
@@ -217,44 +307,50 @@ export default {
       const charName = character.name || 'Sin nombre';
 
       const characterImage = character.image || character.img || character.avatar || character.photo || character.url;
-      let mediaList = [];
+      const hasOwnImage = characterImage && typeof characterImage === 'string' && /^https?:\/\//i.test(characterImage);
+      const cacheKey = `${normalizeStr(series)}__${charId}`;
 
-      if (characterImage && typeof characterImage === 'string' && /^https?:\/\//i.test(characterImage)) {
+      let mediaList = [];
+      let fromCache = false;
+
+      if (hasOwnImage) {
         mediaList = [characterImage];
+      } else if (imageCache.has(cacheKey)) {
+        mediaList = shuffle(imageCache.get(cacheKey));
+        fromCache = true;
       } else {
-        mediaList = await buscarImagenPersonaje(charName, series);
+        mediaList = await buscarImagenPersonaje(charName, series, character.keyword);
       }
 
-      if (!mediaList || mediaList.length === 0) {
+      let dl = mediaList.length ? await descargarPrimera(mediaList) : null;
+
+      if (!dl && fromCache) {
+        imageCache.delete(cacheKey);
+        mediaList = await buscarImagenPersonaje(charName, series, character.keyword);
+        dl = mediaList.length ? await descargarPrimera(mediaList) : null;
+      }
+
+      if (!dl) {
         rollLocks.delete(userId);
         return msg.reply(`ꕥ No se encontraron imágenes válidas para *${charName}*.`);
       }
 
-      let imageToSend = null;
-      for (const mediaUrl of mediaList) {
-        try {
-          const imgRes = await axios.get(mediaUrl, { 
-            responseType: 'arraybuffer', 
-            timeout: 6000, 
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-          });
-          if (imgRes.data && imgRes.data.byteLength > 1000) {
-            imageToSend = Buffer.from(imgRes.data);
-            break;
-          }
-        } catch {}
+      if (!hasOwnImage) {
+        imageCache.set(cacheKey, [dl.url, ...mediaList.filter(u => u !== dl.url)].slice(0, 15));
       }
-
-      if (!imageToSend) {
-        rollLocks.delete(userId);
-        return msg.reply(`ꕥ No se pudo descargar ninguna imagen válida para *${charName}*.`);
-      }
+      const imageToSend = dl.buffer;
 
       const charKey = chatId + '__' + charId;
       let chatChar = await getCharacterStat(charKey) || {};
 
-      const finalValue = chatChar.value || Number(character.price) || Number(character.value) || 5000;
-      const rarity = getCharacterRarity(character, chatChar, finalValue);
+      let finalValue = Number(chatChar.value) || Number(character.price) || Number(character.value) || 0;
+      const rarity = getCharacterRarity(character, chatChar, finalValue || 100);
+
+      const range = RARITY_RANGE[rarity.name];
+      if (range && (finalValue < range[0] || finalValue > range[1])) {
+        finalValue = randomInRange(range[0], range[1]);
+      }
+      if (!finalValue) finalValue = 100;
 
       let ownerId = chatChar.owner || chatChar.claimedBy || chatChar.user || chatChar.claimed;
       let ownerName = 'Desconocido';
@@ -297,13 +393,13 @@ export default {
       const sent = await sock.sendMessage(chatId, { image: imageToSend, caption: caption }, { quoted: msg });
 
       if (!chat.rolls) chat.rolls = {};
-      chat.rolls[sent.key.id] = { 
-        id: charId, 
-        charKey, 
-        name: chatChar.name, 
-        expiresAt: chatChar.expiresAt, 
-        reservedBy: userId, 
-        reservedUntil: chatChar.reservedUntil 
+      chat.rolls[sent.key.id] = {
+        id: charId,
+        charKey,
+        name: chatChar.name,
+        expiresAt: chatChar.expiresAt,
+        reservedBy: userId,
+        reservedUntil: chatChar.reservedUntil
       };
 
       db.data.chats[chatId].rolls = chat.rolls;

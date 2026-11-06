@@ -105,10 +105,9 @@ export default {
       if (!db.data) db.data = {};
       if (!db.data.chats) db.data.chats = {};
       if (!db.data.chats[chatId]) db.data.chats[chatId] = {};
-      let chat = db.getChat ? db.getChat(chatId) : db.data.chats[chatId];
-
-      if (chat?.adminonly || chat?.gacha === false) {
-        return msg.reply(`ꕥ Los comandos de *Gacha* están desactivados en este grupo.\n\nUn *administrador* puede activarlos con:\n» *${usedPrefix}gacha on*`);
+      const chat = db.getChat(msg.chat);
+      if (chat?.adminonly || !chat?.gacha) {
+        return msg.reply(`ꕥ Los comandos de *Gacha* están desactivados en este grupo.\n\nUn *administrador* puede activarlos con el comando:\n» *${usedPrefix}gacha on*`);
       }
 
       const quotedId = msg.quoted?.id;

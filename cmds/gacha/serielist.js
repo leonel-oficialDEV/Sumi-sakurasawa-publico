@@ -1,14 +1,40 @@
 import path from 'path';
+import { promises as fs } from 'fs';
+import { pathToFileURL } from 'url';
 import db from '#db';
 
-async function loadCharacters() {
-  const filePath = path.join(process.cwd(), 'lib', 'characters.js');
+const CHARACTERS_FILE_PATH = path.join(process.cwd(), 'lib', 'characters.js');
+const CHARACTERS_DIR_PATH = path.join(process.cwd(), 'lib', 'characters');
+
+const seriesCache = { signature: '', list: [] };
+
+function normalizeStr(str) {
+  return String(str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function getCharactersSignature() {
+  const files = [CHARACTERS_FILE_PATH];
   try {
-    const module = await import(`file://${filePath}?update=${Date.now()}`);
-    return module.default || module;
-  } catch {
-    return [];
+    const dir = await fs.readdir(CHARACTERS_DIR_PATH);
+    for (const f of dir) {
+      if (f.endsWith('.js')) files.push(path.join(CHARACTERS_DIR_PATH, f));
+    }
+  } catch {}
+
+  let latest = 0;
+  for (const f of files) {
+    try {
+      const { mtimeMs } = await fs.stat(f);
+      latest = Math.max(latest, mtimeMs);
+    } catch {}
   }
+  return `${Math.floor(latest)}-${files.length}`;
 }
 
 function getBaseName(name) {
@@ -17,9 +43,9 @@ function getBaseName(name) {
   const lower = cleanName.toLowerCase();
 
   if (
-    lower.includes('gotoubun') || 
-    lower.includes('gotobun') || 
-    lower.includes('goto-boun') || 
+    lower.includes('gotoubun') ||
+    lower.includes('gotobun') ||
+    lower.includes('goto-boun') ||
     lower.includes('ancianos nakano') ||
     lower.includes('manga concepto original')
   ) {
@@ -28,7 +54,7 @@ function getBaseName(name) {
 
   const franchises = [
     'Dragon Ball', 'Naruto', 'One Piece', 'Bleach', 'Fairy Tail',
-    'Fate/', 'Sword Art Online', 'JoJo', 'Evangelion', 'Genshin Impact', 
+    'Fate/', 'Sword Art Online', 'JoJo', 'Evangelion', 'Genshin Impact',
     'Honkai', 'Pokémon', 'Pokemon', 'Digimon', 'Yu-Gi-Oh!', 'Sailor Moon',
     'Sonic', 'Super Mario', 'The Legend of Zelda', 'Final Fantasy', 'Persona',
     'Boku no Hero', 'My Hero Academia', 'Kimetsu no Yaiba', 'Demon Slayer',
@@ -65,13 +91,19 @@ function getBaseName(name) {
 function getSeriesList(structure) {
   if (!structure) return [];
 
-  const map = {};
+  const map = new Map();
 
   const processCharacter = (c, defaultSource = 'Desconocido') => {
-    if (!c || typeof c !== 'object') return;
+    if (!c || typeof c !== 'object' || typeof c === 'function') return;
     const rawSrc = c.source || c.series || c.anime || defaultSource;
     const src = getBaseName(rawSrc);
-    map[src] = (map[src] || 0) + 1;
+    const key = normalizeStr(src) || src.toLowerCase();
+    const entry = map.get(key);
+    if (entry) {
+      entry.count++;
+    } else {
+      map.set(key, { name: src, count: 1 });
+    }
   };
 
   if (Array.isArray(structure)) {
@@ -81,43 +113,48 @@ function getSeriesList(structure) {
         if (!s || typeof s !== 'object') continue;
         const rawName = s.name || s.title || s.series || `Serie ${i + 1}`;
         if (Array.isArray(s.characters)) {
-          for (const c of s.characters) {
-            processCharacter(c, rawName);
-          }
+          for (const c of s.characters) processCharacter(c, rawName);
         }
       }
     } else {
-      for (const c of structure) {
-        processCharacter(c);
-      }
+      for (const c of structure) processCharacter(c);
     }
-  } else if (typeof structure === 'object' && structure !== null) {
+  } else if (typeof structure === 'object') {
     for (const [key, serie] of Object.entries(structure)) {
       if (!serie || typeof serie === 'function') continue;
 
       if (Array.isArray(serie)) {
-        for (const c of serie) {
-          processCharacter(c, key);
-        }
+        for (const c of serie) processCharacter(c, key);
       } else if (Array.isArray(serie.characters)) {
         const rawName = serie.name || serie.title || key;
-        for (const c of serie.characters) {
-          processCharacter(c, rawName);
-        }
+        for (const c of serie.characters) processCharacter(c, rawName);
       } else if (typeof serie.characters === 'object' && serie.characters !== null) {
         const rawName = serie.name || serie.title || key;
-        for (const c of Object.values(serie.characters)) {
-          processCharacter(c, rawName);
-        }
-      } else if (serie.name && typeof serie.name === 'string' && (serie.source || serie.series || serie.anime)) {
+        for (const c of Object.values(serie.characters)) processCharacter(c, rawName);
+      } else if (serie.name && typeof serie.name === 'string') {
         processCharacter(serie, key);
       }
     }
   }
 
-  return Object.entries(map)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return [...map.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+async function loadSeriesList() {
+  try {
+    const signature = await getCharactersSignature();
+    if (seriesCache.list.length && seriesCache.signature === signature) {
+      return seriesCache.list;
+    }
+    const module = await import(`${pathToFileURL(CHARACTERS_FILE_PATH).href}?update=${signature}`);
+    const raw = module.default || module.characters || module.data || module;
+    const list = getSeriesList(raw);
+    seriesCache.signature = signature;
+    seriesCache.list = list;
+    return list;
+  } catch {
+    return [];
+  }
 }
 
 export default {
@@ -132,21 +169,23 @@ export default {
       if (!db.data) db.data = {};
       if (!db.data.chats) db.data.chats = {};
       if (!db.data.chats[chatId]) db.data.chats[chatId] = {};
-      let chat = db.getChat ? db.getChat(chatId) : db.data.chats[chatId];
-
-      if (chat?.adminonly || chat?.gacha === false) {
+      const chat = db.getChat(msg.chat);
+      if (chat?.adminonly || !chat?.gacha) {
         return msg.reply(`ꕥ Los comandos de *Gacha* están desactivados en este grupo.\n\nUn *administrador* puede activarlos con el comando:\n» *${usedPrefix}gacha on*`);
       }
 
-      const structure = await loadCharacters();
-      const seriesList = getSeriesList(structure);
+      if (args.length && !/^\d+$/.test(args[0])) {
+        return msg.reply(`❀ Debes escribir un número de página válido.\n> Ejemplo » *${usedPrefix + command} 2*`);
+      }
+
+      const seriesList = await loadSeriesList();
       const totalSeries = seriesList.length;
 
       if (totalSeries === 0) {
         return msg.reply(`ꕥ No hay series registradas en *lib/characters.js*.`);
       }
 
-      const page = parseInt(args[0]) || 1;
+      const page = args.length ? parseInt(args[0]) : 1;
       const perPage = 15;
       const totalPages = Math.max(1, Math.ceil(totalSeries / perPage));
 
@@ -167,12 +206,14 @@ export default {
         replyText += `│ *${itemNum}.* ${serie.name} ──> *${serie.count}* pers.\n`;
       }
 
-      replyText += `\n> 📄 *Página ${page}/${totalPages}* • Usa *${usedPrefix + command} [página]* para ver más.`;
-      
+      replyText += `\n> 📄 *Página ${page}/${totalPages}*`;
+      if (page < totalPages) {
+        replyText += ` • Usa *${usedPrefix + command} ${page + 1}* para ver más.`;
+      }
+
       await msg.reply(replyText.trim());
     } catch (e) {
       await msg.reply(`> Ocurrió un error inesperado al ejecutar el comando *${usedPrefix + command}*.\n> [Error: *${e.message}*]`);
     }
   }
 };
-    
