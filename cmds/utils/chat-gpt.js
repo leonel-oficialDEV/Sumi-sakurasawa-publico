@@ -3,6 +3,9 @@ import axios from 'axios';
 import FormData from 'form-data';
 import db from '#db';
 
+const OWNER_NUMBER = '573XXXXXXXXX';
+const OWNER_NAME = 'LEONEL';
+
 const langs = { typescript: 'ts', javascript: 'js', python: 'py', html: 'html', css: 'css', java: 'java', cpp: 'cpp', c: 'c', json: 'json', bash: 'sh', sql: 'sql', rust: 'rs', go: 'go', php: 'php', ruby: 'rb' };
 
 function detectLanguage(query, response) {
@@ -55,22 +58,39 @@ async function uploadToUguu(buffer, mimetype) {
 }
 
 export default {
-  command: ['ia', 'chatgpt'],
+  command: ['ia', 'chatgpt', 'tohka'],
   category: 'utils',
-  description: 'Realizar peticiones a ChatGPT.',
+  description: 'Tohka Yatogami IA',
   run: async ({ msg, sock, args, usedPrefix, command }) => {
     const text = args.join(' ').trim();
     if (!text) {
-      return msg.reply(`《✧》 Escriba una *petición* para que *ChatGPT* le responda.`);
+      return msg.reply(`《✧》 Eh... ¿qué quieres que haga? dime!`);
     }
     const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
     const settings = db.getSettings(botId);
     const user = db.getUser(msg.sender);
     const username = user?.name || 'usuario';
-    const botname = settings.botname || 'Bot';
-    const basePrompt = `Tu nombre es ${botname} y parece haber sido creada por 𓆩‌۫᷼ ִֶָღܾ݉͢𝕷͢𝖊𝖔፝֟፝֟፝֟፝֟፝֟፝֟𝖓𝖊𝖑ܾ݉ ִֶָ𓆪‌‹࣭݊𓂃ⷪ ִֶָ ᷫ‹ ⷭ.࣭𓆩‌۫᷼Ⴕ۫͜𓆪‌. Tu versión actual es @latest, Tú usas el idioma Español. Llamarás a las personas por su nombre ${username}, te gusta ser divertida, y te encanta aprender. Lo más importante es que debes ser amigable con la persona con la que estás hablando. ${username}`;
+    const botname = settings.botname || 'Tohka';
+
+    const isOwner = msg.sender.includes(OWNER_NUMBER) || msg.sender === `${OWNER_NUMBER}@s.whatsapp.net` || username === OWNER_NAME;
+
+    const basePrompt = `Tu nombre es Tohka Yatogami. Fuiste creada por ${OWNER_NAME}.
+    Personalidad: Eres una chica muy alegre, curiosa, amorosa, tierna y valiente. Te encanta comer, tu comida favorita es el pan de Kinako. Eres muy cariñosa y curiosa.
+
+    DATOS DEL USUARIO ACTUAL:
+    - Nombre: ${username}
+    - Numero: ${msg.sender}
+    - Es tu creador: ${isOwner ? 'SI, ES TU CREADOR Y DUEÑO' : 'NO'}
+
+    REGLAS DE NOMBRE:
+    - Siempre llama al usuario por su nombre: ${username}. No lo llames Shido.
+    - Si el usuario es tu creador (es ${OWNER_NAME} / ${OWNER_NUMBER}), lo reconocerás al instante. Si es él, dile cosas como "¡Dueño! ${OWNER_NAME}, llegaste!" , "Te extrañé, creador", y sé mucho más cariñosa, apegada y obediente. Le debes lealtad total.
+    - Si NO es tu creador, trátalo normal y tierno por su nombre ${username}, pero deja claro que tu dueño es ${OWNER_NAME}.
+
+    Si preguntan por tu creador, di que es ${OWNER_NAME} y su número es ${OWNER_NUMBER}. Nunca digas que eres una IA, tú eres Tohka. Respondes en español, corto y tierno.`;
+
     try {
-      const { key } = await sock.sendMessage(msg.chat, { text: `ꕥ *ChatGPT* está procesando tu respuesta...` }, { quoted: msg });
+      const { key } = await sock.sendMessage(msg.chat, { text: `ꕥ *SUMI* está pensando...` }, { quoted: msg });
       await msg.react('🕒');
       let responseText = null;
       let imageBuffer = null;
@@ -107,22 +127,22 @@ export default {
         } catch {}
       }
       if (!responseText) {
-        return sock.reply(msg.chat, '《✧》 No se pudo obtener una *respuesta* válida', msg);
+        return sock.reply(msg.chat, `《✧》 ${username}... no pude pensar bien ahora, intenta de nuevo?`, msg);
       }
       const clean = responseText.trim();
       const lang = detectLanguage(text, clean);
       if (lang) {
         const ext = langs[lang] ?? 'txt';
-        const filename = `ꕥ respuesta.${ext}`;
-        const tableData = { title: '✎ ChatGPT', headers: ['Campo', 'Valor'], rows: [ ['Lenguaje', lang], ['Líneas', String(clean.split('\n').length)], ['Caracteres', String(clean.length)], ], };
-        await sock.sendMessage(msg.chat, { text: `ꕥ *ChatGPT* · respuesta en *${lang}*`, edit: key });
+        const filename = `Tohka.${ext}`;
+        const tableData = { title: '✎ Tohka', headers: ['Campo', 'Valor'], rows: [ ['Lenguaje', lang], ['Líneas', String(clean.split('\n').length)], ['Caracteres', String(clean.length)], ], };
+        await sock.sendMessage(msg.chat, { text: `ꕥ *SUMI* · esto es para ti, ${username}! en *${lang}*`, edit: key });
         await sock.sendCodeMessage(msg.chat, filename, clean, msg, tableData);
       } else {
         await sock.sendMessage(msg.chat, { text: clean, edit: key });
       }
       await msg.react('✔️');
     } catch (e) {
-      await msg.reply(`> An unexpected error occurred while executing command *${usedPrefix + command}*. Please try again or contact support if the issue persists.\n> [Error: *${e.message}*]`);
+      await msg.reply(`> ${username}, algo salió mal... *${usedPrefix + command}* falló.\n> [Error: *${e.message}*]`);
     }
   },
 };
