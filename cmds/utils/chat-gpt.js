@@ -378,9 +378,7 @@ export default {
         answer = await queryAI(character, prompt)
       }
 
-      const allowedReactions = new Set(['🌸', '😊', '😳', '🥺', '💗', '😮', '😔', '🤔', '💪'])      const reactionTag = answer.match(/\[REACCION:([^\]
-]+)\]/u)      let emotion = allowedReactions.has(reactionTag?.[1]?.trim()) ? reactionTag[1].trim() : '🌸'      answer = answer.replace(/\[REACCION:[^\]
-]*\]/gu, '').trim()      if (!answer) throw new Error('El proveedor devolvió una respuesta vacía.')      if (!reactionTag) {        const mood = text.toLowerCase()        if (/triste|llorar|mal día|solo|sola|deprimid/u.test(mood)) emotion = '🥺'        else if (/gracias|hola|buenos días/u.test(mood)) emotion = '😊'        else if (/te quiero|linda|bonita|abrazo/u.test(mood)) emotion = '😳'        else if (/explica|cómo|por qué|ayuda/u.test(mood)) emotion = '🤔'      }      await deliver(sock, msg, answer, pendingKey)      await reactSafely(msg, emotion)
+      const allowedReactions = new Set(['🌸', '😊', '😳', '🥺', '💗', '😮', '😔', '🤔', '💪']); const tagStart = answer.lastIndexOf('[REACCION:'); const tagEnd = tagStart >= 0 ? answer.indexOf(']', tagStart) : -1; const candidate = tagEnd >= 0 ? answer.slice(tagStart + 10, tagEnd).trim() : ''; let emotion = allowedReactions.has(candidate) ? candidate : '🌸'; if (tagEnd >= 0) answer = (answer.slice(0, tagStart) + answer.slice(tagEnd + 1)).trim(); if (!answer) throw new Error('El proveedor devolvió una respuesta vacía.'); if (!candidate) { const mood = text.toLowerCase(); if (/triste|llorar|mal día|deprimid/u.test(mood)) emotion = '🥺'; else if (/gracias|hola|buenos días/u.test(mood)) emotion = '😊'; else if (/te quiero|linda|bonita|abrazo/u.test(mood)) emotion = '😳'; else if (/explica|cómo|por qué|ayuda/u.test(mood)) emotion = '🤔'; } await deliver(sock, msg, answer, pendingKey); await reactSafely(msg, emotion);
 
       state.history.set(sessionKey, {
         updatedAt: Date.now(),
