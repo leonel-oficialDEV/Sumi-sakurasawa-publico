@@ -198,7 +198,7 @@ async function deliver(sock, msg, text, pendingKey) {
 }
 
 export default {
-  command: ['ia', 'chatgpt', 'tohka', 'sumi'],
+  command: ['chatgpt', 'sami', 'ia', 'sumi'],
   category: 'utils', description: 'Conversa con Sumi', uso: 'mensaje | reset',
   run: async ({ msg, sock, args, usedPrefix, command }) => {
     let pendingKey
