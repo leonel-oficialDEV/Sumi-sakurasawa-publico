@@ -1,3 +1,4 @@
+import { channelContent } from '../../lib/channel.js'
 import db from "#db"
 import fs from 'fs'
 import path from 'path'
@@ -117,14 +118,14 @@ export default {
         const isVideo = /\.(mp4|gif|webm)$/i.test(banner)
 
         if (isVideo) {
-          await sock.sendMessage(msg.chat, { video: { url: banner }, caption: finalText, contextInfo: ctx }, { quoted: msg })
+          await sock.sendMessage(msg.chat, channelContent({ video: { url: banner }, caption: finalText, contextInfo: ctx }, msg.chat, true), { quoted: msg })
         } else {
-          await sock.sendMessage(msg.chat, { image: { url: banner }, caption: finalText, contextInfo: ctx }, { quoted: msg })
+          await sock.sendMessage(msg.chat, channelContent({ image: { url: banner }, caption: finalText, contextInfo: ctx }, msg.chat, true), { quoted: msg })
         }
       } catch (err) {
         // Si falla la imagen/video, manda solo texto
         console.log('[menu] Falló banner, enviando sin foto:', err.message)
-        await sock.sendMessage(msg.chat, { text: finalText, linkPreview: false, contextInfo: ctx }, { quoted: msg })
+        await sock.sendMessage(msg.chat, channelContent({ text: finalText, linkPreview: false, contextInfo: ctx }, msg.chat, true), { quoted: msg })
       }
 
     } catch (e) {
