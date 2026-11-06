@@ -57,7 +57,7 @@ export default {
         const medias = results.filter(r => r.image && /^https?:\/\//i.test(r.image)).slice(0, 15).map(r => ({
           type: 'image',
           data: { url: r.image },
-          caption: `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\nㅤ۟∩ ׅ ★ ׅ 🅟𝖨𝖭 🅢earch ׄᰙ \n\n${r.title? `𖣣ֶㅤ֯⌗ ☆  ⬭ *Título* › ${r.title}\n` : ''}𖣣ֶㅤ֯⌗ ☆  ⬭ *Búsqueda* › ${text}\n`
+          caption: `ㅤ۟∩ ׅ ★ ׅ 🅟𝖨𝖭 🅢earch ׄᰙ \n\n${r.title? `𖣣ֶㅤ֯⌗ ☆  ⬭ *Título* › ${r.title}\n` : ''}𖣣ֶㅤ֯⌗ ☆  ⬭ *Búsqueda* › ${text}\n`
         }))
         await sock.sendAlbumMessage( msg.chat, medias, { quoted: msg })
       }
