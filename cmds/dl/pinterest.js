@@ -14,7 +14,7 @@ export default {
   category: 'downloads',
   description: 'Buscar y descarga imágenes y videos de Pinterest.',
   run: async ({ msg, sock, args, usedPrefix, command }) => {
-    const text = args.join(' ').trim()
+    const text = (args || []).join(' ').trim()
     if (!text) return msg.reply('《✧》 Por favor, ingresa un término de búsqueda o un enlace de Pinterest.')
 
     const evogbUrl = global.APIs?.evogb?.url || global.links?.api
@@ -52,7 +52,9 @@ export default {
           await sendChannelMessage(sock, msg.chat, { image: buf? buf : { url: data.url }, caption }, { quoted: msg })
         }
       } else {
-        const results = await pinterestSearch(text, deliriusUrl, vredenUrl)
+        console.info('[pinterest] búsqueda iniciada')
+        const results = await bounded(pinterestSearch(text, deliriusUrl, vredenUrl), 45000, 'búsqueda')
+        console.info('[pinterest] resultados:', results.length)
         if (!results.length) return msg.reply(`《✧》 No se encontraron resultados para *${text}*.`)
 
         const seen = new Set()
@@ -60,14 +62,16 @@ export default {
           if (!/^https?:\/\//i.test(r.image || '') || seen.has(r.image)) return false
           seen.add(r.image)
           return true
-        }).sort(() => Math.random() - 0.5).slice(0, 10)
+        }).sort(() => Math.random() - 0.5).slice(0, 8)
         const loaded = await Promise.allSettled(picked.map(async item => {
           const small = item.image.replace('/originals/', '/474x/')
           const image = await getBuffer(small) || (small !== item.image ? await getBuffer(item.image) : null)
           if (!image) throw new Error('Imagen no disponible')
-          const media = await prepareWAMessageMedia({ image }, { upload: sock.waUploadToServer })
+          const media = await bounded(prepareWAMessageMedia({ image }, { upload: sock.waUploadToServer, mediaUploadTimeoutMs: 20000 }), 25000, 'subida de imagen')
           return { item, media, image }
         }))
+        console.info('[pinterest] imágenes preparadas:', loaded.filter(r => r.status === 'fulfilled').length)
+        for (const entry of loaded) if (entry.status === 'rejected') console.error('[pinterest] preparación:', entry.reason?.message)
         const cards = loaded.filter(r => r.status === 'fulfilled').slice(0, 8).map(({ value: { item, media } }, i) => ({
           header: { title: clean(item.title || text, 60), hasMediaAttachment: true, ...media },
           body: { text: clean(item.description || (item.author ? `Autor: ${item.author}` : `Resultado ${i + 1} · desliza para ver más`), 120) },
@@ -90,10 +94,11 @@ export default {
           } }
         }, { userJid: sock.user?.id, quoted: msg })
         try {
-          await sock.relayMessage(msg.chat, message.message, {
+          await bounded(sock.relayMessage(msg.chat, message.message, {
             messageId: message.key.id,
             additionalNodes: [{ tag: 'biz', attrs: {}, content: [{ tag: 'interactive', attrs: { type: 'native_flow', v: '1' }, content: [{ tag: 'native_flow', attrs: { name: 'carousel' } }] }] }]
-          })
+          }), 25000, 'envío del carrusel')
+          console.info('[pinterest] carrusel enviado:', message.key.id)
         } catch (error) {
           console.error('[pinterest carousel]', error)
           await msg.reply('《✧》 No se pudo enviar el carrusel; envío las imágenes como álbum.')
@@ -101,6 +106,7 @@ export default {
         }
       }
     } catch (e) {
+      console.error('[pinterest] fallo:', e?.stack || e)
       await msg.reply(`> Ocurrió un error al ejecutar el comando *${usedPrefix + command}*.\n> [Error: *${e.message}*]`)
     }
   }
@@ -193,4 +199,9 @@ async function getBuffer(url) {
 
 function clean(value, max) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max)
+}
+
+function bounded(promise, ms, stage) {
+  let timer
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`Tiempo agotado en ${stage}`)), ms) })]).finally(() => clearTimeout(timer))
 }
