@@ -84,10 +84,14 @@ export default {
     const text = args.join(' ').trim();
     if (!text) return msg.reply(`*e-es que...* // no me dijiste nada... (⁄ ⁄•⁄ω⁄•⁄ ⁄)`);
 
-    const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-    const settings = db.getSettings(botId);
-    const user = db.getUser(msg.sender);
-    const username = user?.name || 'usuario';
+    let settings = {}
+    let user = null
+    try {
+      const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+      settings = db.getSettings(botId) || {}
+      user = db.getUser(msg.sender) || null
+    } catch {}
+    const username = user?.name || msg.pushName || 'usuario';
     const botname = settings.botname || 'Sumi';
     const senderNumber = msg.sender.split('@')[0];
     const isCreator = senderNumber === '393715279301';
@@ -95,14 +99,15 @@ export default {
     const basePrompt = `
 Tu nombre es Sumi Sakurasawa, del anime/manga Rent-A-Girlfriend (Kanojo, Okarishimasu). Hablas español.
 PERSONALIDAD: Timidez patológica (tartamudeas e-eh... um...), ansiedad social (trabajas como novia de alquiler para superarte), determinación silenciosa, empatía y pureza. Usas (⁄ ⁄•⁄ω⁄•⁄ ⁄), (///_///), *acciones*.
-CREADOR: 𓆩‌۫᷼ ִֶָღܾ݉͢𝕷͢𝖊𝖔፝֟፝֟𝖓𝖊𝖑ܾ݉ ִֶָ𓆪‌‹࣭݊𓂃ⷪ ִֶָ ᷫ‹ ⷭ.࣭𓆩‌۫᷼ⴕ۫͜𓆪‌ número 393715279301. Si te habla él, llámalo creador-sama o Leonel-kun y sé muy dulce.
+CREADOR: Leonel número 393715279301. Si te habla él, llámalo creador-sama o Leonel-kun y sé muy dulce.
 ${isCreator ? 'ESTÁS HABLANDO CON TU CREADOR LEONEL.' : `Hablas con cliente ${username}.`}
 Tu nombre visible es ${botname} pero eres Sumi.
 `.trim();
 
     try {
-      const { key } = await sock.sendMessage(msg.chat, { text: `*e-eh... Sumi está escribiendo... (⁄ ⁄•⁄ω⁄•⁄ ⁄)*` }, { quoted: msg });
-      await msg.react('🫣');
+      const pending = await sock.sendMessage(msg.chat, { text: `*e-eh... Sumi está escribiendo... (⁄ ⁄•⁄ω⁄•⁄ ⁄)*` }, { quoted: msg });
+      const key = pending?.key
+      try { await sock.sendMessage(msg.chat, { react: { text: '🫣', key: msg.key } }) } catch {}
       let responseText = null;
       let imageBufferUrl = null;
 
@@ -139,22 +144,39 @@ Tu nombre visible es ${botname} pero eres Sumi.
         } catch {}
       }
 
-      if (!responseText) return sock.reply(msg.chat, 'e-eh... no pude responder... g-gomen... (///_///)', msg);
+      if (!responseText) {
+        if (key) {
+          try { await sock.sendMessage(msg.chat, { text: 'e-eh... no pude responder... g-gomen... (///_///)', edit: key }); return } catch {}
+        }
+        return sock.sendMessage(msg.chat, { text: 'e-eh... no pude responder... g-gomen... (///_///)' }, { quoted: msg });
+      }
 
       const clean = responseText.trim();
       const lang = detectLanguage(text, clean);
       if (lang) {
         const ext = langs[lang] ?? 'txt';
         const filename = `Sumi-${Date.now()}.${ext}`;
-        const tableData = { title: '✎ Sumi te escribió', headers: ['Campo', 'Valor'], rows: [['Lenguaje', lang], ['Líneas', String(clean.split('\n').length)]] };
-        await sock.sendMessage(msg.chat, { text: `*e-eh... lo hice... (⁄ ⁄•⁄ω⁄•⁄ ⁄)* · *${lang}*`, edit: key });
-        await sock.sendCodeMessage(msg.chat, filename, clean, msg, tableData);
+        if (key) {
+          try { await sock.sendMessage(msg.chat, { text: `*e-eh... lo hice... (⁄ ⁄•⁄ω⁄•⁄ ⁄)* · *${lang}*`, edit: key }) } catch {}
+        }
+        await sock.sendMessage(msg.chat, {
+          document: Buffer.from(clean),
+          mimetype: 'text/plain',
+          fileName: filename,
+          caption: `✎ Sumi te escribió\nLenguaje: ${lang} | Líneas: ${clean.split('\n').length}`
+        }, { quoted: msg });
       } else {
-        await sock.sendMessage(msg.chat, { text: clean, edit: key });
+        if (key) {
+          try { await sock.sendMessage(msg.chat, { text: clean, edit: key }) } catch {
+            await sock.sendMessage(msg.chat, { text: clean }, { quoted: msg })
+          }
+        } else {
+          await sock.sendMessage(msg.chat, { text: clean }, { quoted: msg })
+        }
       }
-      await msg.react('💮');
+      try { await sock.sendMessage(msg.chat, { react: { text: '💮', key: msg.key } }) } catch {}
     } catch (e) {
       await msg.reply(`*a-ah... fallé...* Error: ${e.message}`);
     }
   }
-  }
+}
