@@ -8,6 +8,8 @@ import { existsSync } from 'node:fs';
 import { readFile, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
+/* ═════════════ ANIMACIÓN (canvas + ffmpeg) ═════════════ */
+
 const W = 512, H = 640, FPS = 24;
 const CX = W / 2, CY = 315, R = 215;
 const TAU = Math.PI * 2;
@@ -17,6 +19,7 @@ const RESULT_T = 2.8;
 const VIDEO_MS = Math.round((SPIN_T + RESULT_T) * 1000);
 const FONT = '"DejaVu Sans", "Liberation Sans", Arial, sans-serif';
 
+// intenta registrar una fuente del sistema si existe
 for (const p of [
   '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
   '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
@@ -290,6 +293,7 @@ async function renderRouletteVideo({ winningNumber, betLabel, amount, outcome, n
   }
 }
 
+/* ═════════════ COMANDO ═════════════ */
 
 function msToTime(duration) {
   const totalSec = Math.ceil(duration / 1000);
@@ -380,6 +384,7 @@ export default {
     else if (['alto', 'high'].includes(targetInput)) { betType = 'range'; betValue = 'high'; betLabel = '📈 ALTO (19-36)'; }
     else return msg.reply(`ꕥ Opción no válida. Usa *${usedPrefix}helprt* para ver las opciones disponibles.`);
 
+    // Se decide y se cobra YA; la animación es solo visual
     db.updateChatUser(chatId, senderId, 'lastroulette', Date.now());
 
     const winningNumber = Math.floor(Math.random() * 37);
@@ -435,4 +440,16 @@ ${resultStatus}
         video, mimetype: 'video/mp4', gifPlayback: true, caption: spinningCaption
       }, { quoted: msg });
     } catch (e) {
-      consol
+      console.error('[ruleta] error animación:', e);
+      return sock.sendMessage(chatId, { text: finalText }, { quoted: msg });
+    }
+
+    await delay(VIDEO_MS + 1500);
+    try {
+      await sock.sendMessage(chatId, { caption: finalText, edit: sent.key });
+    } catch (e) {
+      console.error('[ruleta] no se pudo editar, enviando mensaje nuevo:', e);
+      await sock.sendMessage(chatId, { text: finalText }, { quoted: msg });
+    }
+  }
+};
