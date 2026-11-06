@@ -3,6 +3,7 @@ import db from '#db'
 
 const BOT_NAME = 'Sumi'
 const API_URL = 'https://api.siputzx.my.id/api/ai/gptoss120b'
+const KYZZ_URL = 'https://api.kyzzz.xyz/api/ai/claude'
 const OWNER_IDS = new Set(['393715279301@s.whatsapp.net', '104260465336559@lid'])
 const MAX_INPUT = 2000
 const MAX_PROMPT = 4000
@@ -40,13 +41,13 @@ function redact(value) {
   return String(value ?? '')
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [OCULTO]')
     .replace(/([?&](?:key|api_key|apikey|token)=)[^&\s]+/gi, '$1[OCULTO]')
-    .replace(/((?:authorization|api[_-]?key|access[_-]?token|password|secret)["']?\s*[:=]\s*["']?)([^"'\s&,}\n]+)/gi, '$1[OCULTO]')
+    .replace(/((?:authorization|x-api-key|api[_-]?key|access[_-]?token|password|secret)["']?\s*[:=]\s*["']?)([^"'\s&,}\n]+)/gi, '$1[OCULTO]')
 }
 
 function formatError(error) {
   const lines = [
     'ꕥ *SUMI · ERROR DEL SERVICIO*', '',
-    'Proveedor: Siputzx · GPT OSS 120B',
+    `Proveedor: ${error.provider || 'Servicio de conversación'}`,
     `Tipo: ${error.name || 'Error'}`,
     `HTTP: ${error.response?.status ?? 'Sin respuesta HTTP'}`,
     `Código: ${error.code || 'Sin código'}`,
@@ -113,9 +114,9 @@ function requestPayload(character, history, text) {
   return { prompt, system, temperature: 0.7 }
 }
 
-function parseAnswer(response) {
+function parseAnswer(response, provider = 'siputzx') {
   const data = response.data
-  let value = data?.data?.response
+  let value = provider === 'kyzz' ? data?.result : data?.data?.response
   if (data?.status === false || typeof value !== 'string' || !value.trim() || /^error\b/i.test(value.trim())) {
     const error = new Error('El servidor respondió sin una respuesta válida.')
     error.name = 'InvalidAIResponse'
@@ -139,16 +140,38 @@ function parseAnswer(response) {
 }
 
 async function queryAI(character, history, text) {
-  const payload = requestPayload(character, history, text)
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const response = await axios.post(API_URL, payload, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: TIMEOUT, maxContentLength: 2 * 1024 * 1024
-    })
-    try { return parseAnswer(response) }
-    catch (error) {
-      if (attempt || error.name !== 'InvalidAIResponse' || response.data?.status === false) throw error
+  const key = process.env.KYZZ_API_KEY?.trim()
+  const provider = key ? 'Kyzz · Claude' : 'Siputzx · GPT OSS 120B'
+  try {
+    let response
+    if (key) {
+      const prompt = `${character}\n\n${makePrompt(history, text)}`
+      response = await axios.get(KYZZ_URL, {
+        params: { prompt }, headers: { 'x-api-key': key },
+        timeout: TIMEOUT, maxContentLength: 2 * 1024 * 1024,
+        maxRedirects: 0
+      })
+    } else {
+      response = await axios.post(API_URL, requestPayload(character, history, text), {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: TIMEOUT, maxContentLength: 2 * 1024 * 1024
+      })
     }
+    return parseAnswer(response, key ? 'kyzz' : 'siputzx')
+  } catch (error) {
+    const safe = new Error(key ? 'La consulta a Kyzz no se completó.' : 'La consulta a Siputzx no se completó.')
+    safe.name = error.name || 'Error'
+    safe.code = error.code || 'AI_REQUEST_FAILED'
+    safe.provider = provider
+    safe.stack = undefined
+    if (error.response) {
+      safe.response = {
+        status: error.response.status,
+        headers: { 'retry-after': error.response.headers?.['retry-after'] },
+        data: { message: 'Consulta fallida; se omitió el contenido para proteger el contexto y las credenciales.' }
+      }
+    }
+    throw safe
   }
 }
 
