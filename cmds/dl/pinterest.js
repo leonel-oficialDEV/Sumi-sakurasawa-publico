@@ -1,3 +1,4 @@
+import { generateWAMessageFromContent, prepareWAMessageMedia } from 'baileys'
 import { sendChannelMessage } from '../../lib/channel.js'
 import fetch from 'node-fetch'
 import { execFile } from 'child_process'
@@ -9,7 +10,7 @@ import os from 'os'
 const execFileAsync = promisify(execFile)
 
 export default {
-  command: ['pinterest', 'pin'],
+  command: ['pinterest', 'pin', 'pint', 'pinterestimg', 'pinimg'],
   category: 'downloads',
   description: 'Buscar y descarga imágenes y videos de Pinterest.',
   run: async ({ msg, sock, args, usedPrefix, command }) => {
@@ -54,12 +55,40 @@ export default {
         const results = await pinterestSearch(text, deliriusUrl, vredenUrl)
         if (!results.length) return msg.reply(`《✧》 No se encontraron resultados para *${text}*.`)
 
-        const medias = results.filter(r => r.image && /^https?:\/\//i.test(r.image)).slice(0, 15).map(r => ({
-          type: 'image',
-          data: { url: r.image },
-          caption: `ㅤ۟∩ ׅ ★ ׅ 🅟𝖨𝖭 🅢earch ׄᰙ \n\n${r.title? `𖣣ֶㅤ֯⌗ ☆  ⬭ *Título* › ${r.title}\n` : ''}𖣣ֶㅤ֯⌗ ☆  ⬭ *Búsqueda* › ${text}\n`
+        const seen = new Set()
+        const picked = results.filter(r => {
+          if (!/^https?:\/\//i.test(r.image || '') || seen.has(r.image)) return false
+          seen.add(r.image)
+          return true
+        }).sort(() => Math.random() - 0.5).slice(0, 10)
+        const loaded = await Promise.allSettled(picked.map(async item => {
+          const small = item.image.replace('/originals/', '/474x/')
+          const image = await getBuffer(small) || (small !== item.image ? await getBuffer(item.image) : null)
+          if (!image) throw new Error('Imagen no disponible')
+          const media = await prepareWAMessageMedia({ image }, { upload: sock.waUploadToServer })
+          return { item, media }
         }))
-        await sock.sendAlbumMessage( msg.chat, medias, { quoted: msg })
+        const cards = loaded.filter(r => r.status === 'fulfilled').slice(0, 8).map(({ value: { item, media } }, i) => ({
+          header: { title: clean(item.title || text, 60), hasMediaAttachment: true, ...media },
+          body: { text: clean(item.description || (item.author ? `Autor: ${item.author}` : `Resultado ${i + 1} · desliza para ver más`), 120) },
+          footer: { text: 'Sumi Sakurasawa · Pinterest' },
+          nativeFlowMessage: { buttons: [
+            { name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: 'Abrir pin', url: item.link || item.image, merchant_url: item.link || item.image }) },
+            { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: 'Ver más', id: `${usedPrefix || '.'}pinterest ${text}` }) }
+          ] }
+        }))
+        if (!cards.length) return msg.reply('《✧》 Las imágenes de Pinterest no están disponibles.')
+        const message = generateWAMessageFromContent(msg.chat, {
+          viewOnceMessage: { message: {
+            messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+            interactiveMessage: {
+              body: { text: `📌 *PINTEREST*\n\n🔎 *${clean(text, 80)}*\n\n🖼️ ${cards.length} imágenes · desliza el carrusel` },
+              footer: { text: 'Sumi Sakurasawa · toca Abrir pin para verlo en Pinterest' },
+              carouselMessage: { cards, messageVersion: 1 }
+            }
+          } }
+        }, { userJid: sock.user?.id, quoted: msg })
+        await sock.relayMessage(msg.chat, message.message, { messageId: message.key.id })
       }
     } catch (e) {
       await msg.reply(`> Ocurrió un error al ejecutar el comando *${usedPrefix + command}*.\n> [Error: *${e.message}*]`)
@@ -128,15 +157,15 @@ async function pinterestSearch(query, deliriusUrl, vredenUrl) {
       if (!r.ok) continue
       const res = await r.json()
       if (res?.data?.length) {
-        const m = res.data.map(d => ({ image: d.hd || d.image || d.image_url, title: d.title || query })).filter(x=>x.image)
+        const m = res.data.map(d => ({ image: d.hd || d.image || d.image_url, title: d.title || query, description: d.description, author: d.username || d.author, link: d.link || d.pin_url })).filter(x=>x.image)
         if (m.length) return m
       }
       if (res?.response?.pins?.length) {
-        const m = res.response.pins.map(p => ({ image: p.media?.images?.orig?.url })).filter(x=>x.image)
+        const m = res.response.pins.map(p => ({ image: p.media?.images?.orig?.url, title: p.title, description: p.description, link: p.link || (p.id ? `https://www.pinterest.com/pin/${p.id}/` : undefined) })).filter(x=>x.image)
         if (m.length) return m
       }
       if (res?.results?.length) {
-        const m = res.results.map(x => ({ image: typeof x === 'string'? x : x?.image || x?.url })).filter(x=>x.image)
+        const m = res.results.map(x => ({ image: typeof x === 'string'? x : x?.image || x?.url, title: x?.title, description: x?.description, link: x?.link })).filter(x=>x.image)
         if (m.length) return m
       }
     } catch {}
@@ -146,8 +175,12 @@ async function pinterestSearch(query, deliriusUrl, vredenUrl) {
 
 async function getBuffer(url) {
   try {
-    const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0', 'referer': 'https://www.pinterest.com/' } })
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { 'user-agent': 'Mozilla/5.0', 'referer': 'https://www.pinterest.com/' } })
     if (!res.ok) return null
     return Buffer.from(await res.arrayBuffer())
   } catch { return null }
+}
+
+function clean(value, max) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max)
 }
