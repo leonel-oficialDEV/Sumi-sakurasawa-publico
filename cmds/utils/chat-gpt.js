@@ -247,7 +247,7 @@ export default {
       const isOwner = OWNER_IDS.has(sender)
       const previous = state.history.get(sessionKey)
       const history = previous?.messages || []
-      let answer = identityResponse(text, isOwner)
+      let answer = null
       if (!answer) {
         const pending = await sock.sendMessage(msg.chat, { text: 'ꕥ Estoy leyendo tu mensaje…' }, { quoted: msg })
         pendingKey = pending?.key
