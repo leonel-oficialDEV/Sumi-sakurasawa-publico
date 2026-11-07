@@ -219,14 +219,14 @@ export default {
     if (!query) {
       return sock.reply(
         msg.chat,
-        `📌 *PINTEREST*\n\nUso: *${prefix + command} <búsqueda>*\nEjemplo: *${prefix + command} paisajes de anime*\n\n_Recibirás un carrusel con varias imágenes._`,
+        `《✧》 *PINTEREST*\n\nUso: *${prefix + command} <búsqueda>*\nEjemplo: *${prefix + command} paisajes de anime*\n\n_Recibirás un carrusel con varias imágenes._`,
         msg,
       )
     }
 
     const now = Date.now()
     if (now - (cooldown.get(msg.sender) || 0) < COOLDOWN_MS) {
-      return sock.reply(msg.chat, '📌 Espera unos segundos antes de buscar de nuevo.', msg)
+      return sock.reply(msg.chat, '《✧》 Espera unos segundos antes de buscar de nuevo.', msg)
     }
     cooldown.set(msg.sender, now)
     if (cooldown.size > 500) for (const [k, t] of cooldown) if (now - t > COOLDOWN_MS) cooldown.delete(k)
