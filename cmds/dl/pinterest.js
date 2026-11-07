@@ -17,6 +17,86 @@ const SCRAPE_TIMEOUT_MS = 15_000
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 const IMG_HEADERS = { 'user-agent': UA, referer: 'https://www.pinterest.com/', accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' }
 
+function pinUrl(value) {
+  let url
+  try { url = new URL(value) } catch { throw new Error('Enlace de Pinterest inválido') }
+  const host = url.hostname.toLowerCase()
+  if (url.protocol !== 'https:' || url.port || url.username || url.password ||
+      !(host === 'pin.it' || /^(?:[a-z]{2,3}\.)?(?:www\.)?pinterest\.(?:com|co\.uk|ca|de|fr|es|it|com\.mx|com\.au|jp|pt)$/.test(host))) {
+    throw new Error('Usa un enlace HTTPS de Pinterest o pin.it')
+  }
+  return url
+}
+
+async function resolvePin(value) {
+  let url = pinUrl(value)
+  for (let hop = 0; hop < 6; hop++) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), SCRAPE_TIMEOUT_MS)
+    try {
+      const res = await fetch(url, { method: 'GET', redirect: 'manual', headers: { 'user-agent': UA }, signal: ctrl.signal })
+      if ([301, 302, 303, 307, 308].includes(res.status)) {
+        const location = res.headers.get('location')
+        await res.body?.cancel()
+        if (!location) throw new Error('Redirección de Pinterest incompleta')
+        const next = new URL(location, url)
+        if (next.hostname === 'api.pinterest.com' && next.pathname === '/url_shortener/redirect/') {
+          const target = next.searchParams.get('url')
+          if (!target) throw new Error('El enlace corto no contiene un pin')
+          url = pinUrl(target)
+        } else url = pinUrl(next.href)
+        continue
+      }
+      await res.body?.cancel()
+      if (!res.ok) throw new Error('Pinterest no permitió abrir este enlace')
+      const id = url.pathname.match(/^\/pin\/(?:[^/]*--)?(\d+)\/?$/)?.[1]
+      if (!id) throw new Error('El enlace debe apuntar a un pin público, no a un perfil o tablero')
+      return `https://www.pinterest.com/pin/${id}/`
+    } finally { clearTimeout(timer) }
+  }
+  throw new Error('Demasiadas redirecciones en el enlace')
+}
+
+function pinMediaUrl(value) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && !url.port && !url.username && !url.password &&
+      /(^|\.)pinimg\.com$/.test(url.hostname) && !/\.m3u8(?:$|\?)/i.test(url.href) ? url.href : ''
+  } catch { return '' }
+}
+
+function pinDownloadMedia(data) {
+  const source = data?.data
+  if (!data?.status || !source) return []
+  const downloads = Array.isArray(source.download) ? source.download :
+    Array.isArray(source) ? source : [source.download || { url: source.dl, type: source.type }]
+  const seen = new Set()
+  return downloads.flatMap(item => {
+    const url = pinMediaUrl(item?.url)
+    if (!url || seen.has(url)) return []
+    seen.add(url)
+    return [{ type: /video/i.test(item.type || '') || /\.(mp4|mov|webm)(?:$|\?)/i.test(url) ? 'video' : 'image', url }]
+  })
+}
+
+async function downloadPin(value) {
+  const url = await resolvePin(value)
+  const base = global.APIs?.delirius?.url || 'https://api.delirius.online'
+  const data = await getJson(`${base.replace(/\/$/, '')}/download/pinterestdl?${new URLSearchParams({ url })}`,
+    { 'user-agent': UA, accept: 'application/json' }, 45_000)
+  const media = pinDownloadMedia(data)
+  if (!media.length) throw new Error('El pin no tiene imágenes o videos públicos descargables')
+  if (media.length > 30) throw new Error('El álbum supera el máximo de 30 archivos')
+  return { media, title: clean(data.data?.title, 180), url }
+}
+
+async function downloadSearch(query) {
+  const base = global.APIs?.delirius?.url || 'https://api.delirius.online'
+  const data = await getJson(`${base.replace(/\/$/, '')}/search/pinterestv2?${new URLSearchParams({ text: query })}`,
+    { 'user-agent': UA, accept: 'application/json' }, 25_000)
+  return normalize(fromApi(data))
+}
+
 const IM = proto.Message.InteractiveMessage
 const cooldown = new Map()
 let apiDownUntil = 0
@@ -122,6 +202,11 @@ async function searchPinterest(query) {
   const viaApi = await searchApi(query)
   if (viaApi.length) return viaApi
 
+  try {
+    const fallback = await downloadSearch(query)
+    if (fallback.length) return fallback
+  } catch (err) { console.error('[ pinterest ] búsqueda alternativa:', err?.message) }
+
   let direct = []
   try {
     direct = await searchDirect(query)
@@ -160,7 +245,11 @@ async function sendCarousel(sock, msg, { intro, footer, cards }) {
   const chat = msg.chat
 
   const built = await Promise.allSettled(cards.map(async (c) => {
-    const media = await prepareWAMessageMedia({ image: c.image }, { upload: sock.waUploadToServer })
+    let timer
+    const media = await Promise.race([
+      prepareWAMessageMedia({ image: c.image }, { upload: sock.waUploadToServer }),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Tiempo de preparación agotado')), 25_000) }),
+    ]).finally(() => clearTimeout(timer))
     const buttons = [
       { name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: 'Abrir pin', url: c.url, merchant_url: c.url }) },
       { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: 'Ver más', id: c.more }) },
@@ -200,7 +289,12 @@ async function sendCarousel(sock, msg, { intro, footer, cards }) {
     if (!chat.endsWith('@g.us')) additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } })
   }
 
-  await sock.relayMessage(chat, message.message, { messageId: message.key.id, additionalNodes })
+  try {
+    await sock.relayMessage(chat, message.message, { messageId: message.key.id, additionalNodes })
+  } catch (err) {
+    err.pinterestRelayAttempted = true
+    throw err
+  }
 }
 
 async function sendLoose(sock, msg, cards) {
@@ -212,14 +306,17 @@ async function sendLoose(sock, msg, cards) {
 export default {
   command: ['pinterest', 'pin', 'pint', 'pinterestimg', 'pinimg'],
   category: 'downloads',
-  description: 'Busca y envía un carrusel de imágenes de Pinterest',
+  description: 'Busca imágenes en carrusel y descarga pins públicos de Pinterest',
   run: async ({ msg, sock, args, command, usedPrefix: prefix }) => {
-    const query = clean(args.join(' '), 100)
+    const input = (args || []).join(' ').trim()
+    const isLink = /^https?:\/\//i.test(input)
+    const query = isLink ? input : clean(input, 100)
+    if (query.length > 2048) return sock.reply(msg.chat, '《✧》 El enlace es demasiado largo.', msg)
 
     if (!query) {
       return sock.reply(
         msg.chat,
-        `《✧》 *PINTEREST*\n\nUso: *${prefix + command} <búsqueda>*\nEjemplo: *${prefix + command} paisajes de anime*\n\n_Recibirás un carrusel con varias imágenes._`,
+        `《✧》 *PINTEREST*\n\nUso: *${prefix + command} <búsqueda o enlace>*\nEjemplo: *${prefix + command} paisajes de anime*\n\n_Recibirás un carrusel con varias imágenes._`,
         msg,
       )
     }
@@ -234,6 +331,20 @@ export default {
     await react(sock, msg, '⏳')
 
     try {
+      if (isLink) {
+        const pin = await downloadPin(query)
+        const caption = `📌 *PINTEREST*\n\n${pin.title ? pin.title + '\n' : ''}${pin.url}`
+        if (pin.media.length > 1) {
+          await sock.sendAlbumMessage(msg.chat, pin.media.map((item, index) => ({
+            type: item.type, data: { url: item.url }, ...(index === 0 ? { caption } : {}),
+          })), { quoted: msg })
+        } else {
+          const item = pin.media[0]
+          await sock.sendMessage(msg.chat, { [item.type]: { url: item.url }, caption }, { quoted: msg })
+        }
+        await react(sock, msg, '✅')
+        return
+      }
       const results = await searchPinterest(query)
       const picked = shuffle(results).slice(0, MAX_CARDS + 2)
       const images = await Promise.allSettled(picked.map(loadImage))
@@ -266,13 +377,14 @@ export default {
         await sendCarousel(sock, msg, { intro, footer, cards })
       } catch (err) {
         console.error('[ pinterest ] carrusel:', err?.message || err)
+        if (err.pinterestRelayAttempted) throw new Error('No se pudo confirmar el carrusel; no se reenviará para evitar duplicados')
         await sendLoose(sock, msg, cards)
       }
 
       await react(sock, msg, '✅')
     } catch (err) {
       await react(sock, msg, '❌')
-      await sock.reply(msg.chat, `❌ No pude buscar en Pinterest: ${err?.message || 'error desconocido'}`, msg)
+      await sock.reply(msg.chat, `❌ No pude obtener el contenido de Pinterest: ${err?.message || 'error desconocido'}`, msg)
     }
   },
 }
