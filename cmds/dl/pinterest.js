@@ -253,14 +253,14 @@ export default {
 
       const cards = loaded.map(({ item, image }, i) => ({
         image,
-        title: clean(item.title, 60) || `📌 ${clean(query, 50)}`,
-        body: clean(item.description, 120) || (item.username ? `👤 @${clean(item.username, 40)}` : `Resultado ${i + 1} · desliza para ver más`),
+        title: clean(item.title, 60) || `✰ ${clean(query, 50)}`,
+        body: clean(item.description, 120) || (item.username ? `✰ @${clean(item.username, 40)}` : `Resultado ${i + 1} · desliza para ver más`),
         footer,
         url: item.link || item.image,
         more,
       }))
 
-      const intro = `📌 *PINTEREST*\n\n🔎 *${clean(query, 80)}*\n\n🖼️ ${cards.length} imágenes · desliza el carrusel`
+      const intro = `《✧》 *PINTEREST*\n\n➛ *${clean(query, 80)}*\n\n✰ ${cards.length} imágenes · desliza el carrusel`
 
       try {
         await sendCarousel(sock, msg, { intro, footer, cards })
