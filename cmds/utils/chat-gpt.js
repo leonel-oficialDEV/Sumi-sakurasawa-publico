@@ -1,5 +1,4 @@
 import fetch from 'node-fetch';
-import axios from 'axios';
 import FormData from 'form-data';
 import db from '#db';
 
@@ -54,16 +53,17 @@ async function uploadToUguu(buffer, mimetype) {
   }
 }
 
-// Natsu responde en varias formas, esta función agarra cualquiera
 function parseNatsu(data) {
   if (!data) return null;
   if (typeof data === 'string' && data.trim()) return data;
   if (typeof data?.result === 'string' && data.result.trim()) return data.result;
   if (typeof data?.result?.text === 'string' && data.result.text.trim()) return data.result.text;
+  if (typeof data?.info?.respuesta === 'string' && data.info.respuesta.trim()) return data.info.respuesta;
+  if (typeof data?.info?.response === 'string' && data.info.response.trim()) return data.info.response;
+  if (typeof data?.respuesta === 'string' && data.respuesta.trim()) return data.respuesta;
   if (typeof data?.response === 'string' && data.response.trim()) return data.response;
   if (typeof data?.data === 'string' && data.data.trim()) return data.data;
   if (typeof data?.text === 'string' && data.text.trim()) return data.text;
-  if (typeof data?.results === 'string' && data.results.trim()) return data.results;
   return null;
 }
 
@@ -81,7 +81,7 @@ export default {
   command: ['ia', 'chatgpt', 'sumi'],
   category: 'utils',
   description: 'Sumi Sakurasawa IA con Natsu',
-  run: async ({ msg, sock, args, usedPrefix, command }) => {
+  run: async ({ msg, sock, args }) => {
     const text = args.join(' ').trim();
     if (!text) {
       return msg.reply(`*e-es que...* // no me dijiste nada... (⁄ ⁄•⁄ω⁄•⁄ ⁄)`);
@@ -100,7 +100,7 @@ export default {
     const senderNumber = msg.sender.split('@')[0];
     const isCreator = senderNumber === '393715279301';
 
-    // PERSONALIDAD DE SUMI COMPLETA - sin tocar
+    // PERSONALIDAD DE SUMI COMPLETA
     const basePrompt = `
 Tu nombre es Sumi Sakurasawa, del anime/manga Rent-A-Girlfriend (Kanojo, Okarishimasu). Hablas español.
 PERSONALIDAD: Timidez patológica (tartamudeas e-eh... um...), ansiedad social, determinación silenciosa, empatía y pureza. Usas (⁄ ⁄•⁄ω⁄•⁄ ⁄), (///_///), *acciones*.
@@ -134,12 +134,13 @@ Sé honesta sobre ser IA y tus límites; no inventes datos ni herramientas. Cód
         } catch {}
       }
 
-      // API 1: Natsu AI
+      // Solo manda la petición directo a la API, sin lib
+      // 1ro: /api/ai
       try {
         responseText = await callNatsu('https://natsu-api.darkcore.xyz/api/ai?prompt=', basePrompt, text, imageBuffer);
       } catch (e) { console.log('[sumi] natsu-ai fail:', e.message) }
 
-      // API 2: Natsu Gemini - solo si la 1 falló
+      // 2do: /api/ai-gemini si el 1ro falla
       if (!responseText) {
         try {
           responseText = await callNatsu('https://natsu-api.darkcore.xyz/api/ai-gemini?prompt=', basePrompt, text, imageBuffer);
