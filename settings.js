@@ -18,7 +18,7 @@ global.devs = [
 ];
 
 global.staff = [
-//  '<numero',
+  '5804245610338',
 ];
 
 global.inv = [
