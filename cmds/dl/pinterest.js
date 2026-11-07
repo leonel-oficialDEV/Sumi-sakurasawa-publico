@@ -1,175 +1,279 @@
-import { sendChannelMessage } from '../../lib/channel.js'
-import fetch from 'node-fetch'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import fs from 'fs'
-import path from 'path'
-import os from 'os'
+import db from '#db'
+import { proto, generateWAMessageFromContent, prepareWAMessageMedia } from 'baileys'
 
-const execFileAsync = promisify(execFile)
+const MAX_CARDS = 8
+const COOLDOWN_MS = 8_000
+const IMG_TIMEOUT_MS = 12_000
+const IMG_MAX_BYTES = 3 * 1024 * 1024
+// Nodos extra que WhatsApp necesita para dibujar mensajes interactivos. Ponlo en false si tu Baileys ya los agrega
+const BIZ_NODE = true
+
+const API_BASE = 'https://api.stellarwa.xyz'
+const API_PATH = '/search/pinterest'
+const API_KEY_PARAM = 'key'
+const API_TIMEOUT_MS = 12_000
+const API_COOLDOWN_MS = 10 * 60 * 1000 
+const SCRAPE_TIMEOUT_MS = 15_000
+
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+const IMG_HEADERS = { 'user-agent': UA, referer: 'https://www.pinterest.com/', accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' }
+
+const IM = proto.Message.InteractiveMessage
+const cooldown = new Map()
+let apiDownUntil = 0
+
+const clean = (v, max = 120) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, max)
+const str = (v) => (typeof v === 'string' ? v : '')
+const http = (v) => (/^https?:\/\/\S+$/i.test(str(v)) ? v : '')
+const react = (sock, msg, text) => sock.sendMessage(msg.chat, { react: { text, key: msg.key } }).catch(() => {})
+
+function shuffle(list) {
+  const copy = [...list]
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[copy[i], copy[j]] = [copy[j], copy[i]]
+  }
+  return copy
+}
+
+async function getJson(url, headers, timeout) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeout)
+  try {
+    const res = await fetch(url, { headers, signal: ctrl.signal })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return await res.json()
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function normalize(list) {
+  const seen = new Set()
+  const out = []
+  for (const item of list) {
+    if (!item?.image || seen.has(item.image)) continue
+    seen.add(item.image)
+    out.push(item)
+  }
+  return out
+}
+
+function fromApi(data) {
+  const list = [data?.results, data?.result, data?.data, data].find(Array.isArray) || []
+  return list.map((it) => {
+    if (typeof it === 'string') return { image: http(it) }
+    return {
+      image: http(it?.image || it?.imageUrl || it?.img || it?.media || it?.url),
+      title: str(it?.title || it?.grid_title),
+      description: str(it?.description),
+      username: str(it?.username || it?.author || it?.pinner?.username),
+      link: http(it?.link || it?.pin || it?.source || it?.pinUrl),
+    }
+  })
+}
+
+function fromPinterest(data) {
+  const list = data?.resource_response?.data?.results
+  return (Array.isArray(list) ? list : []).map((it) => ({
+    image: http(it?.images?.['474x']?.url || it?.images?.orig?.url),
+    fallback: http(it?.images?.orig?.url),
+    title: str(it?.grid_title || it?.title),
+    description: str(it?.description),
+    username: str(it?.pinner?.username),
+    link: it?.id ? `https://www.pinterest.com/pin/${it.id}/` : '',
+  }))
+}
+
+async function searchApi(query) {
+  const key = process.env.STELLARWA_KEY || global.stellarKey || ''
+  if (!key || Date.now() < apiDownUntil) return []
+  try {
+    const url = `${API_BASE}${API_PATH}?${new URLSearchParams({ query, [API_KEY_PARAM]: key })}`
+    return normalize(fromApi(await getJson(url, { 'user-agent': UA, accept: 'application/json' }, API_TIMEOUT_MS)))
+  } catch (err) {
+    apiDownUntil = Date.now() + API_COOLDOWN_MS
+    console.error('[ pinterest ] API falló, se usa descarga directa:', err?.message || err)
+    return []
+  }
+}
+
+async function searchDirect(query) {
+  const data = {
+    options: { isPrefetch: false, query, scope: 'pins', bookmarks: [''], no_fetch_context_on_resource: false, page_size: 40 },
+    context: {},
+  }
+  const url = 'https://www.pinterest.com/resource/BaseSearchResource/get/?' + new URLSearchParams({
+    source_url: `/search/pins/?q=${encodeURIComponent(query)}&rs=typed`,
+    data: JSON.stringify(data),
+    _: String(Date.now()),
+  })
+  const headers = {
+    'user-agent': UA,
+    accept: 'application/json, text/javascript, */*, q=0.01',
+    'accept-language': 'en-US,en;q=0.9',
+    referer: 'https://www.pinterest.com/',
+    'x-requested-with': 'XMLHttpRequest',
+    'x-pinterest-pws-handler': 'www/search/[scope].js',
+  }
+  return normalize(fromPinterest(await getJson(url, headers, SCRAPE_TIMEOUT_MS)))
+}
+
+async function searchPinterest(query) {
+  const viaApi = await searchApi(query)
+  if (viaApi.length) return viaApi
+
+  let direct = []
+  try {
+    direct = await searchDirect(query)
+  } catch (err) {
+    console.error('[ pinterest ] descarga directa falló:', err?.message || err)
+  }
+  if (!direct.length) throw new Error('No encontré imágenes para esa búsqueda')
+  return direct
+}
+
+async function fetchImage(url) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), IMG_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, { headers: IMG_HEADERS, signal: ctrl.signal })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!String(res.headers.get('content-type') || '').startsWith('image/')) throw new Error('No es una imagen')
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (!buf.length || buf.length > IMG_MAX_BYTES) throw new Error('Tamaño de imagen inválido')
+    return buf
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function loadImage(item) {
+  try {
+    return await fetchImage(item.image)
+  } catch (err) {
+    if (!item.fallback || item.fallback === item.image) throw err
+    return fetchImage(item.fallback)
+  }
+}
+
+async function sendCarousel(sock, msg, { intro, footer, cards }) {
+  const chat = msg.chat
+
+  const built = await Promise.allSettled(cards.map(async (c) => {
+    const media = await prepareWAMessageMedia({ image: c.image }, { upload: sock.waUploadToServer })
+    const buttons = [
+      { name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: 'Abrir pin', url: c.url, merchant_url: c.url }) },
+      { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: 'Ver más', id: c.more }) },
+    ]
+    return IM.create({
+      header: IM.Header.create({ title: c.title, hasMediaAttachment: true, ...media }),
+      body: IM.Body.create({ text: c.body }),
+      footer: IM.Footer.create({ text: c.footer }),
+      nativeFlowMessage: IM.NativeFlowMessage.create({ buttons, messageParamsJson: '' }),
+    })
+  }))
+
+  const ready = built.filter((r) => r.status === 'fulfilled').map((r) => r.value)
+  if (!ready.length) throw new Error('No se pudieron preparar las tarjetas')
+
+  const message = generateWAMessageFromContent(chat, {
+    viewOnceMessage: {
+      message: {
+        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+        interactiveMessage: IM.create({
+          header: IM.Header.create({ hasMediaAttachment: false }),
+          body: IM.Body.create({ text: intro }),
+          footer: IM.Footer.create({ text: footer }),
+          carouselMessage: IM.CarouselMessage.create({ cards: ready, messageVersion: 1 }),
+        }),
+      },
+    },
+  }, { quoted: msg, userJid: sock.user.id })
+
+  const additionalNodes = []
+  if (BIZ_NODE) {
+    additionalNodes.push({
+      tag: 'biz',
+      attrs: {},
+      content: [{ tag: 'interactive', attrs: { type: 'native_flow', v: '1' }, content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }] }],
+    })
+    if (!chat.endsWith('@g.us')) additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } })
+  }
+
+  await sock.relayMessage(chat, message.message, { messageId: message.key.id, additionalNodes })
+}
+
+async function sendLoose(sock, msg, cards) {
+  for (const c of cards.slice(0, 3)) {
+    await sock.sendMessage(msg.chat, { image: c.image, caption: `*${c.title}*\n${c.url}` }, { quoted: msg })
+  }
+}
 
 export default {
-  command: ['pinterest', 'pin'],
+  command: ['pinterest', 'pin', 'pint', 'pinterestimg', 'pinimg'],
   category: 'downloads',
-  description: 'Buscar y descarga imágenes y videos de Pinterest.',
-  run: async ({ msg, sock, args, usedPrefix, command }) => {
-    const text = args.join(' ').trim()
-    if (!text) return msg.reply('《✧》 Por favor, ingresa un término de búsqueda o un enlace de Pinterest.')
+  description: 'Busca y envía un carrusel de imágenes de Pinterest',
+  run: async ({ msg, sock, args, command, usedPrefix: prefix }) => {
+    const query = clean(args.join(' '), 100)
 
-    const evogbUrl = global.APIs?.evogb?.url || global.links?.api
-    const evogbKey = global.APIs?.evogb?.key
-    const deliriusUrl = global.APIs?.delirius?.url
-    const vredenUrl = global.APIs?.vreden?.url
-
-    try {
-      await sock.sendMessage(msg.chat, { text: '《✧》 Buscando en Pinterest, espera un momento…' }, { quoted: msg })
-      if (/^https?:\/\//i.test(text)) {
-        const data = await pinterestDownload(text, evogbUrl, evogbKey, deliriusUrl)
-        if (!data?.url) return msg.reply('《✧》 No se pudo obtener el contenido del enlace.')
-
-        const caption = `📢 Canal: ${global.links?.channel || 'https://whatsapp.com/channel/0029Vagdmfv1SWt5nfdR4z3w'}\n\nㅤ۟∩ ׅ ★ ׅ 🅟𝖨𝖭 🅓ownload ׄᰙ \n\n${data.title? `𖣣ֶㅤ֯⌗ ☆  ⬭ *Título* › ${data.title}\n` : ''}${data.author? `𖣣ֶㅤ֯⌗ ☆  ⬭ *Autor* › ${data.author}\n` : ''}${data.username? `𖣣ֶㅤ֯⌗ ☆  ⬭ *Usuario* › ${data.username}\n` : ''}${data.uploadDate? `𖣣ֶㅤ֯⌗ ☆  ⬭ *Fecha* › ${data.uploadDate}\n` : ''}𖣣ֶㅤ֯⌗ ☆  ⬭ *Enlace* › ${text}`
-
-        const isVideo = data.type === 'video' || /\.(mp4|mov|webm)(\?|$)/i.test(data.url)
-
-        if (isVideo) {
-          const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinterest-'))
-          const input = path.join(tempDir, 'input.mp4')
-          const output = path.join(tempDir, 'output.mp4')
-          try {
-            const res = await fetch(data.url)
-            if (!res.ok) throw new Error('No se pudo descargar el video')
-            fs.writeFileSync(input, Buffer.from(await res.arrayBuffer()))
-            try {
-              await execFileAsync('ffmpeg', ['-y','-i',input,'-c:v','libx264','-preset','veryfast','-crf','23','-c:a','aac','-movflags','+faststart',output])
-              await sendChannelMessage(sock, msg.chat, { video: fs.readFileSync(output), caption, mimetype:'video/mp4', fileName:'pinterest.mp4' }, { quoted: msg })
-            } catch {
-              await sendChannelMessage(sock, msg.chat, { video: fs.readFileSync(input), caption, mimetype:'video/mp4', fileName:'pinterest.mp4' }, { quoted: msg })
-            }
-          } finally { try { fs.rmSync(tempDir, { recursive:true, force:true }) } catch {} }
-        } else {
-          const buf = await getBuffer(data.url)
-          await sendChannelMessage(sock, msg.chat, { image: buf? buf : { url: data.url }, caption }, { quoted: msg })
-        }
-      } else {
-        const results = await pinterestSearch(text, deliriusUrl, vredenUrl)
-        if (!results.length) return msg.reply(`《✧》 No se encontraron resultados para *${text}*.`)
-
-        const seen = new Set()
-        const picked = results.filter(r => {
-          if (!/^https?:\/\//i.test(r.image || '') || seen.has(r.image)) return false
-          seen.add(r.image)
-          return true
-        }).slice(0, 8)
-        const loaded = await Promise.allSettled(picked.map(async item => {
-          const image = await getBuffer(item.image.replace('/originals/', '/474x/')) || await getBuffer(item.image)
-          if (!image) throw new Error('No se pudo descargar una imagen')
-          return { item, image }
-        }))
-        const ready = loaded.filter(r => r.status === 'fulfilled').map(r => r.value)
-        if (!ready.length) return msg.reply('《✧》 No se pudieron descargar las imágenes de Pinterest.')
-        const medias = ready.map(({ item, image }, i) => ({
-          type: 'image',
-          data: image,
-          caption: `📌 Pinterest · ${i + 1}/${ready.length}\n🔎 ${text}\n${item.title || text}\n${item.link || item.image}`
-        }))
-        if (medias.length > 1 && typeof sock.sendAlbumMessage === 'function') {
-          await sock.sendAlbumMessage(msg.chat, medias, { quoted: msg })
-        } else {
-          for (const media of medias) {
-            await sock.sendMessage(msg.chat, { image: media.data, caption: media.caption }, { quoted: msg })
-          }
-        }
-        console.info('[pinterest] álbum enviado:', medias.length)
-        if (ready.length < picked.length) await msg.reply(`《✧》 Se enviaron ${ready.length} de ${picked.length} imágenes; las restantes no se pudieron descargar.`)
-      }
-    } catch (e) {
-      console.error('[pinterest]', e?.stack || e)
-      await msg.reply(`> Ocurrió un error al ejecutar el comando *${usedPrefix + command}*.\n> [Error: *${e.message}*]`)
+    if (!query) {
+      return sock.reply(
+        msg.chat,
+        `📌 *PINTEREST*\n\nUso: *${prefix + command} <búsqueda>*\nEjemplo: *${prefix + command} paisajes de anime*\n\n_Recibirás un carrusel con varias imágenes._`,
+        msg,
+      )
     }
-  }
-}
 
-async function pinterestDownload(url, evogbUrl, evogbKey, deliriusUrl) {
-  const endpoints = []
-  if (evogbUrl) endpoints.push(`${evogbUrl}/dl/pinterest?url=${encodeURIComponent(url)}${evogbKey? `&key=${evogbKey}` : ''}`)
-  if (deliriusUrl) endpoints.push(`${deliriusUrl}/download/pinterestdl?url=${encodeURIComponent(url)}`)
+    const now = Date.now()
+    if (now - (cooldown.get(msg.sender) || 0) < COOLDOWN_MS) {
+      return sock.reply(msg.chat, '📌 Espera unos segundos antes de buscar de nuevo.', msg)
+    }
+    cooldown.set(msg.sender, now)
+    if (cooldown.size > 500) for (const [k, t] of cooldown) if (now - t > COOLDOWN_MS) cooldown.delete(k)
 
-  for (const endpoint of endpoints) {
+    await react(sock, msg, '⏳')
+
     try {
-      const r = await fetch(endpoint, { signal: AbortSignal.timeout(20000) })
-      if (!r.ok) continue
-      const res = await r.json()
-      
-      let dlUrl = null
-      let rawType = 'image'
-      let meta = {}
+      const results = await searchPinterest(query)
+      const picked = shuffle(results).slice(0, MAX_CARDS + 2)
+      const images = await Promise.allSettled(picked.map(loadImage))
 
-      if (res?.status && res?.data?.dl) {
-        dlUrl = res.data.dl
-        rawType = res.data.type
-        meta = res.data
-      } else if (res?.status && res?.data?.download?.url) {
-        dlUrl = res.data.download.url
-        rawType = res.data.download.type
-        meta = res.data
+      const loaded = picked
+        .map((item, i) => ({ item, image: images[i].status === 'fulfilled' ? images[i].value : null }))
+        .filter((e) => e.image)
+        .slice(0, MAX_CARDS)
+
+      if (!loaded.length) throw new Error('Las imágenes de Pinterest no están disponibles')
+
+      const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net'
+      const settings = (await db.getSettings(botId)) || {}
+      const botName = sock.subConfig?.name || settings.namebot || 'Bot'
+      const footer = `${botName} · Pinterest`
+      const more = `${prefix}${command} ${query}`
+
+      const cards = loaded.map(({ item, image }, i) => ({
+        image,
+        title: clean(item.title, 60) || `📌 ${clean(query, 50)}`,
+        body: clean(item.description, 120) || (item.username ? `👤 @${clean(item.username, 40)}` : `Resultado ${i + 1} · desliza para ver más`),
+        footer,
+        url: item.link || item.image,
+        more,
+      }))
+
+      const intro = `📌 *PINTEREST*\n\n🔎 *${clean(query, 80)}*\n\n🖼️ ${cards.length} imágenes · desliza el carrusel`
+
+      try {
+        await sendCarousel(sock, msg, { intro, footer, cards })
+      } catch (err) {
+        console.error('[ pinterest ] carrusel:', err?.message || err)
+        await sendLoose(sock, msg, cards)
       }
 
-      if (dlUrl) {
-        const isVideoByUrl = /\.(mp4|mov|webm|m3u8)(\?|$)/i.test(dlUrl) || dlUrl.includes('pinimg.com/videos') || dlUrl.includes('v.pinimg')
-        const isVideoByType = String(rawType).toLowerCase().includes('video')
-        const finalType = (isVideoByUrl || isVideoByType) ? 'video' : 'image'
-
-        return { 
-          type: finalType, 
-          url: dlUrl, 
-          title: meta.title, 
-          author: meta.author || meta.author_name, 
-          username: meta.username, 
-          uploadDate: meta.uploadDate || meta.upload 
-        }
-      }
-    } catch {}
-  }
-  return null
-}
-
-async function pinterestSearch(query, deliriusUrl, vredenUrl) {
-  const endpoints = []
-  if (deliriusUrl) {
-    endpoints.push(`${deliriusUrl}/search/pinterestv2?text=${encodeURIComponent(query)}`)
-    endpoints.push(`${deliriusUrl}/search/pinterest?text=${encodeURIComponent(query)}`)
-  }
-  if (vredenUrl) {
-    endpoints.push(`${vredenUrl}/api/v1/search/pinterest?query=${encodeURIComponent(query)}`)
-    endpoints.push(`${vredenUrl}/api/v2/search/pinterest?query=${encodeURIComponent(query)}&limit=10&type=videos`)
-  }
-
-  for (const endpoint of endpoints) {
-    try {
-      const r = await fetch(endpoint, { signal: AbortSignal.timeout(20000) })
-      if (!r.ok) continue
-      const res = await r.json()
-      if (res?.data?.length) {
-        const m = res.data.map(d => ({ image: d.hd || d.image || d.image_url, title: d.title || query, link: d.link || d.pin_url || d.url })).filter(x=>x.image)
-        if (m.length) return m
-      }
-      if (res?.response?.pins?.length) {
-        const m = res.response.pins.map(p => ({ image: p.media?.images?.orig?.url })).filter(x=>x.image)
-        if (m.length) return m
-      }
-      if (res?.results?.length) {
-        const m = res.results.map(x => ({ image: typeof x === 'string'? x : x?.image || x?.url })).filter(x=>x.image)
-        if (m.length) return m
-      }
-    } catch {}
-  }
-  return []
-}
-
-async function getBuffer(url) {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { 'user-agent': 'Mozilla/5.0', 'referer': 'https://www.pinterest.com/' } })
-    if (!res.ok) return null
-    return Buffer.from(await res.arrayBuffer())
-  } catch { return null }
+      await react(sock, msg, '✅')
+    } catch (err) {
+      await react(sock, msg, '❌')
+      await sock.reply(msg.chat, `❌ No pude buscar en Pinterest: ${err?.message || 'error desconocido'}`, msg)
+    }
+  },
 }
