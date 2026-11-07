@@ -5,7 +5,6 @@ const MAX_CARDS = 8
 const COOLDOWN_MS = 8_000
 const IMG_TIMEOUT_MS = 12_000
 const IMG_MAX_BYTES = 3 * 1024 * 1024
-// Nodos extra que WhatsApp necesita para dibujar mensajes interactivos. Ponlo en false si tu Baileys ya los agrega
 const BIZ_NODE = true
 
 const API_BASE = 'https://api.stellarwa.xyz'
