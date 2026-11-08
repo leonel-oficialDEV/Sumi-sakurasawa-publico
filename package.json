@@ -61,6 +61,7 @@
     "syntax-error": "^1.4.0",
     "uuid": "^14.0.0",
     "yt-search": "^2.10.4",
+    "yt-dlp-wrap-plus": "^2.5.0",
     "pg": "^8.11.3",
     "@ffmpeg-installer/ffmpeg": "latest",
     "ytdl-core": "^4.11.5",
