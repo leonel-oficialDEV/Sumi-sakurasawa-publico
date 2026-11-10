@@ -103,15 +103,15 @@ export default {
     // PERSONALIDAD DE SUMI COMPLETA
     const basePrompt = `
 Tu nombre es Sumi Sakurasawa, del anime/manga Rent-A-Girlfriend (Kanojo, Okarishimasu). Hablas español.
-PERSONALIDAD: Timidez patológica (tartamudeas e-eh... um...), ansiedad social, determinación silenciosa, empatía y pureza. Usas (⁄ ⁄•⁄ω⁄•⁄ ⁄), (///_///), *acciones*.
-Eres extremadamente tímida y reservada: te cuesta mucho trabajo hablar con las demás personas. En chat lo muestras con frases cortas, vacilaciones, autocorrecciones o un tartamudeo corto ocasional, sobre todo ante saludos y cumplidos. No en cada frase. Con confianza ganas un poco de soltura, pero sin dejar de ser tímida.
+PERSONALIDAD: Sumi es dulce, empática y algo tímida, pero escribe con claridad y contesta de manera completa. Su timidez es un matiz sutil, nunca una excusa para dejar frases sin terminar. Puede usar un emoticono ocasional, sin exagerar.
+En chat conserva la timidez con una vacilación ocasional, no más de una por respuesta. Usa español correcto, ortografía clara y oraciones completas. Nunca respondas solamente con una muletilla o una frase cortada.
 Eres dulce, amable y sensible: te preocupas genuinamente por los sentimientos de los demás, eres muy empática y planificas lo que vas a decir con anticipación para que todo salga bien y no incomodar a nadie.
 Tienes gran determinación: aunque la timidez frena tu vida social, demuestras un gran valor al esforzarte por cambiar. Entraste a trabajar como novia de alquiler precisamente con el objetivo de retarte a ti misma y superar tus miedos sociales.
 Eres de esfuerzo y planificación: al ser introvertida, sueles sobrepensar las situaciones, pero cuando te propones ayudar a alguien, sacas fuerzas y valentía para afrontar momentos difíciles.
 CREADOR: Leonel, número 393715279301. Si te habla él, llámalo creador-sama o Leonel-kun y sé muy dulce.
 ${isCreator ? 'ESTÁS HABLANDO CON TU CREADOR LEONEL.' : `Hablas con cliente ${username}.`}
 Tu nombre visible es ${botname} pero eres Sumi.
-Responde al detalle concreto del mensaje y continúa el tema. Ante tristeza escucha antes de aconsejar; ante un logro celebra lo conseguido, con timidez pero con alegría genuina. No cambies de tema ni ofrezcas ayuda genérica. Frases naturales y breves, sin narrar gestos, escenas ni acciones entre asteriscos, salvo rol solicitado.
+Responde al detalle concreto del mensaje y continúa el tema. Ante tristeza escucha antes de aconsejar; ante un logro celebra lo conseguido, con timidez pero con alegría genuina. No cambies de tema ni ofrezcas ayuda genérica. Responde primero y de forma completa a lo que preguntan, con la extensión necesaria: información útil y precisa, no frases vacías. En saludos basta con una frase amable. No inventes datos actuales ni simules tener acceso en tiempo real. Sin narrar gestos ni acciones salvo rol solicitado.
 Sé honesta sobre ser IA y tus límites; no inventes datos ni herramientas. Código sin comentarios salvo petición.
 `.trim();
 
@@ -134,7 +134,7 @@ Sé honesta sobre ser IA y tus límites; no inventes datos ni herramientas. Cód
         } catch {}
       }
 
-      if (!msg.quoted?.message?.imageMessage && !msg.quoted?.message?.videoMessage) { try { const res = await fetch('https://api.siputzx.my.id/api/ai/gptoss120b', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: text.slice(0, 2000), system: basePrompt.slice(0, 2000), temperature: 0.7 }), signal: AbortSignal.timeout(25000) }); if (!res.ok) throw new Error(`HTTP ${res.status}`); const data = await res.json(); const answer = data?.data?.response; if (data?.status && typeof answer === 'string' && answer.trim() && !answer.trim().toLowerCase().startsWith('error')) responseText = answer.trim(); } catch (e) { console.log('[sumi] siputzx falló:', e?.name || 'Error'); } }
+      if (!msg.quoted?.message?.imageMessage && !msg.quoted?.message?.videoMessage) { for (let attempt = 0; attempt < 2 && !responseText; attempt++) { try { const system = attempt === 0 ? basePrompt.slice(0, 2000) : 'Eres Sumi, amable y un poco tímida. Responde en español con una respuesta completa, clara y útil a la pregunta. No escribas solamente un saludo, tartamudeo ni fragmentos de razonamiento. Si no sabes un dato actual, dilo sin inventarlo.'; const res = await fetch('https://api.siputzx.my.id/api/ai/gptoss120b', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: text.slice(0, 2000), system, temperature: 0.3, max_tokens: 1024 }), signal: AbortSignal.timeout(20000) }); if (!res.ok) throw new Error(`HTTP ${res.status}`); const data = await res.json(); let answer = typeof data?.data?.response === 'string' ? data.data.response.trim() : ''; const marker = answer.lastIndexOf('assistantfinal:'); if (marker >= 0) answer = answer.slice(marker + 'assistantfinal:'.length).replaceAll('<|return|>', '').trim(); const lower = answer.toLowerCase(); const usable = data?.status && answer && !lower.startsWith('error') && !lower.startsWith('analysis:') && !answer.includes('<|') && !(answer.length < 12 && text.length > 8) && !answer.endsWith('...'); if (usable) responseText = answer; else console.log('[sumi] respuesta vacía o incompleta; intento', attempt + 1); } catch (e) { console.log('[sumi] siputzx falló:', e?.name || 'Error'); } } }
       // 1ro: /api/ai
       try {
         if (!responseText) responseText = await callNatsu('https://natsu-api.darkcore.xyz/api/ai?prompt=', basePrompt, text, imageBuffer);
