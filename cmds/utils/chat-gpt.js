@@ -70,7 +70,7 @@ function parseNatsu(data) {
 async function callNatsu(baseUrl, basePrompt, text, imageUrl) {
   let fullPrompt = `${basePrompt}\n\nUsuario dice: ${text}`;
   if (imageUrl) fullPrompt += `\n\nEl usuario envió esta imagen, descríbela / responde sobre ella: ${imageUrl}`;
-  const res = await fetch(`${baseUrl}${encodeURIComponent(fullPrompt)}`);
+  const res = await fetch(`${baseUrl}${encodeURIComponent(fullPrompt)}`, { signal: AbortSignal.timeout(12000) }); if (!res.ok) throw new Error(`Natsu HTTP ${res.status}`);
   const data = await res.json().catch(() => null);
   const parsed = parseNatsu(data);
   if (!parsed) throw new Error(`Natsu no devolvió respuesta: ${JSON.stringify(data)?.slice(0, 300)}`);
@@ -148,7 +148,7 @@ Sé honesta sobre ser IA y tus límites; no inventes datos ni herramientas. Cód
       }
 
       if (!responseText) {
-        return sock.sendMessage(msg.chat, { text: 'e-eh... no pude responder... g-gomen... (///_///)', edit: key });
+        const notice = 'e-eh... la IA no está disponible ahora. Inténtalo más tarde. (///_///)'; try { if (!key) throw new Error('Sin clave de mensaje'); return await sock.sendMessage(msg.chat, { text: notice, edit: key }); } catch { return await sock.sendMessage(msg.chat, { text: notice }, { quoted: msg }); }
       }
 
       const clean = responseText.trim();
