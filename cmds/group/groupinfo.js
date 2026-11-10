@@ -29,7 +29,7 @@ export default {
 
       const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
       const botSettings = (db.getSettings ? db.getSettings(botId) : {}) || {};
-      const botname = botSettings.botname || 'ElainaBot';
+      const botname = botSettings.botname || 'SumiBot';
       const monedas = botSettings.currency || 'Monedas';
 
       let totalCoins = 0;
