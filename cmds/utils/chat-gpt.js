@@ -134,10 +134,10 @@ Sé honesta sobre ser IA y tus límites; no inventes datos ni herramientas. Cód
         } catch {}
       }
 
-      // Solo manda la petición directo a la API, sin lib
+      if (!msg.quoted?.message?.imageMessage && !msg.quoted?.message?.videoMessage) { try { const res = await fetch('https://api.siputzx.my.id/api/ai/gptoss120b', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: text.slice(0, 2000), system: basePrompt.slice(0, 2000), temperature: 0.7 }), signal: AbortSignal.timeout(25000) }); if (!res.ok) throw new Error(`HTTP ${res.status}`); const data = await res.json(); const answer = data?.data?.response; if (data?.status && typeof answer === 'string' && answer.trim() && !answer.trim().toLowerCase().startsWith('error')) responseText = answer.trim(); } catch (e) { console.log('[sumi] siputzx falló:', e?.name || 'Error'); } }
       // 1ro: /api/ai
       try {
-        responseText = await callNatsu('https://natsu-api.darkcore.xyz/api/ai?prompt=', basePrompt, text, imageBuffer);
+        if (!responseText) responseText = await callNatsu('https://natsu-api.darkcore.xyz/api/ai?prompt=', basePrompt, text, imageBuffer);
       } catch (e) { console.log('[sumi] natsu-ai fail:', e.message) }
 
       // 2do: /api/ai-gemini si el 1ro falla
