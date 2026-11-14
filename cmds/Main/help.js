@@ -66,8 +66,8 @@ export default {
       const own = await db.getUser(owner)
       const dev = owner && !isNaN(owner.replace('@s.whatsapp.net', '')) ? own.name : owner || 'Oculto'
 
-      let menu = `> *¡ʜᴏʟᴀ!* ${msg.pushName}, como está tu día?, mucho gusto mi nombre es *${namebot2}* ʚ♡⃛ɞ(ू•ᴗ•ू❁)*\n\n` +
-      ` ⌒࣪᷼⏜͡ ۪ ࿚ꨪᰰ࿙ ࣭࣪⢏࣭۟⢢࣭ׄ᎐፝֟᎐࣭ׄ⡔࣭۟⡹࣭ׄ ࿚ꨪᰰ࿙ ۪ ͡⏜ׄ᷼⌒\n\n\n` +
+      let menu = `> *¡ʜᴏʟᴀ!* ${msg.pushName}, como está tu día?, mucho gusto mi nombre es *${namebot2}* ʚ♡⃛ɞ(ू•ᴗ•ू❁)*\n` +
+      ` ⌒࣪᷼⏜͡ ۪ ࿚ꨪᰰ࿙ ࣭࣪⢏࣭۟⢢࣭ׄ᎐፝֟᎐࣭ׄ⡔࣭۟⡹࣭ׄ ࿚ꨪᰰ࿙ ۪ ͡⏜ׄ᷼⌒\n\n` +
       `: ̗̀` +
       `` +
       `: ̗̀ꕥ *ᴛɪᴘᴏ ::* ${botType}\n` +
