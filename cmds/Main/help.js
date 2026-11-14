@@ -68,8 +68,8 @@ export default {
 
       let menu = `> *¡ʜᴏʟᴀ!* ${msg.pushName}, como está tu día?, mucho gusto mi nombre es *${namebot2}* ʚ♡⃛ɞ(ू•ᴗ•ू❁)*\n\n` +
       ` ⌒࣪᷼⏜͡ ۪ ࿚ꨪᰰ࿙ ࣭࣪⢏࣭۟⢢࣭ׄ᎐፝֟᎐࣭ׄ⡔࣭۟⡹࣭ׄ ࿚ꨪᰰ࿙ ۪ ͡⏜ׄ᷼⌒\n\n` +
-      `: ̗̀〄 *ᴅᴇᴠᴇʟᴏᴘᴇʀ ::*oculto\n` +
-      `: ̗̀☕︎ *ᴏᴡɴᴇʀ ::* ${dev}\n` +
+      `: ̗̀` +
+      `` +
       `: ̗̀ꕥ *ᴛɪᴘᴏ ::* ${botType}\n` +
       `: ̗̀☄︎ *sɪsᴛᴇᴍᴀ/ᴏᴘʀ ::* ${platform}\n\n` +
       `: ̗̀❖ *ᴜsᴇʀs ::* ${(Object.keys(userr).length || 0).toLocaleString()}\n` +
