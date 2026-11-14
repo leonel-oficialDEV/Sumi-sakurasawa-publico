@@ -58,7 +58,7 @@ export default {
       const sinPrefijo = /^(help|menu)$/i.test(usedPrefix)
       const cfg = botSettings.prefijo
       const prefix = sinPrefijo ? (Array.isArray(cfg) ? cfg[0] : typeof cfg === 'string' ? cfg : '') : usedPrefix
-      const link = 'https://chat.whatsapp.com/CC35aSwNsPsHYKkGsFE9Cp?s=cl&p=a&mlu=4&ilr=4&iam=2'
+      const link = 'https://chat.whatsapp.com/CpIIZ50p0gsBmyI7FQraBT'
       const isOficialBot = botId === (global?.sock?.user?.id?.split(':')[0] + '@s.whatsapp.net')
       const botType = isOficialBot ? 'Owner' : 'Sub Bot'
       const platform = `${os.type()} ${os.release()} ${os.arch()}`
