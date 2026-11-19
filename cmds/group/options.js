@@ -1,14 +1,3 @@
-/*
-FUNCION AL COMIENZO DEL RUN EN LOS COMANDO: (VA AL PRINCIPIO DE TODO)
-
-
-
-const chat = db.getChat(msg.chat);
-if (chat.adminonly || !chat.game) {
-  return msg.reply(`ꕥ Los comandos de *Juegos* están desactivados en este grupo.\n\nUn *administrador* puede activarlos con el comando:\n» *${usedPrefix}juegos on*`);
-}
-*/
-
 import db from '#db';
 export default {
   command: [
