@@ -789,7 +789,7 @@ export default {
         ? cleanText.split('|').map((s) => s.trim())
         : [cleanText, ''];
 
-      const packname = customPack || global.packname || 'Tohka WA Bot';
+      const packname = customPack || global.packname || 'SUMI BOT';
       const author = customAuth || global.author || msg.pushName || 'Sticker';
 
       const visualNode = hasOwnVisual ? msg : quoted;
