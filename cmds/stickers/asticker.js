@@ -683,7 +683,7 @@ async function consumeSessionWithAudio(msg, sock, send, react, session, audioNod
 }
 
 export default {
-  command: ['audiosticker', 'asticker', 'stickeraudio', 'saudio'],
+  command: ['audiosticker', 'asticker', 'stickeraudio', 'saudio','as'],
   category: 'stickers',
   description: 'Crea un sticker estático o animado con sonido (máx 90s) para chats o canales.',
 
