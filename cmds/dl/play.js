@@ -1,541 +1,252 @@
+
+import fetch from 'node-fetch'
 import yts from 'yt-search'
-import { getBuffer } from '#serialize'
 import fs from 'fs'
-import path from 'path'
-import crypto from 'crypto'
+import os from 'os'
+import { spawn } from 'child_process'
+import { pipeline } from 'stream/promises'
+import { Readable } from 'stream'
 
-const DOWNLOAD_DIR = '/home/container/tmp'
-const TMP_DIR = '/home/container/tmp'
-const YTDLP_PATH = '/home/container/yt-dlp'
-const COOKIES_PATH = '/home/container/cookies.txt'
-const MAX_INTENTOS_DESCARGA = 3
+const BASE = () => String(global.APIs?.evogb?.url || global.links?.api || 'https://api.evogb.org').replace(/\/$/, '')
+const KEY = () => global.APIs?.evogb?.key
 
-const REGISTROS = new Map()
-const DESCARGAS_ACTIVAS = new Set()
-const SOCKETS_REGISTRADOS = new WeakSet()
+const route = (name) => global.APIs?.evogb?.routes?.[name]
 
-let ytDlp
-let instalacionYtDlp
+export const QUALITIES = ['144p', '240p', '360p', '480p', '720p', '1080p']
+export const DEFAULT_QUALITY = '480p'
+export const MAX_SECONDS = 25 * 60
 
-process.env.TMPDIR = TMP_DIR
-process.env.TMP = TMP_DIR
-process.env.TEMP = TMP_DIR
+const MAX_BYTES = 120 * 1024 * 1024
+const API_TIMEOUT = 60000
+const SEARCH_TIMEOUT = 20000
+const DL_TIMEOUT = 5 * 60 * 1000
 
-fs.mkdirSync(DOWNLOAD_DIR, { recursive: true })
+export const isYT = (t) => /(youtube\.com|youtu\.be)\//i.test(t)
 
-function esperar(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+const tooBig = () => {
+  const e = new Error('El archivo supera los 120 MB')
+  e.code = 'TOO_BIG'
+  return e
 }
 
-async function cargarYtDlp() {
-  if (ytDlp && fs.existsSync(YTDLP_PATH)) return ytDlp
-  if (instalacionYtDlp) return instalacionYtDlp
+const toSeconds = (d) => {
+  if (d === undefined || d === null || d === '') return 0
+  if (typeof d === 'number') return d
+  const s = String(d).trim()
+  if (/^\d+$/.test(s)) return Number(s)
+  const p = s.split(':').map(Number)
+  if (p.some(isNaN)) return 0
+  return p.reduce((a, v) => a * 60 + v, 0)
+}
 
-  instalacionYtDlp = (async () => {
-    const modulo = await import('yt-dlp-wrap-plus')
-    const YTDlpWrap = modulo.default?.default || modulo.default || modulo.YTDlpWrap
-
-    if (!YTDlpWrap) {
-      throw new Error('No se pudo cargar yt-dlp-wrap-plus.')
-    }
-
-    if (!fs.existsSync(YTDLP_PATH)) {
-      await YTDlpWrap.downloadFromGithub(YTDLP_PATH)
-    }
-
-    await fs.promises.chmod(YTDLP_PATH, 0o755)
-
-    const instancia = new YTDlpWrap(YTDLP_PATH)
-    await instancia.execPromise(['--version'])
-
-    ytDlp = instancia
-    return ytDlp
-  })()
-
+async function api(path, params) {
+  const key = KEY()
+  if (!key) {
+    console.error('[yt] Falta global.APIs.evogb.key en settings.js')
+    return null
+  }
+  if (!path) {
+    console.error('[yt] Falta una ruta en global.APIs.evogb.routes (settings.js)')
+    return null
+  }
+  const qs = new URLSearchParams({ ...params, key }).toString()
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), API_TIMEOUT)
   try {
-    return await instalacionYtDlp
+    const res = await fetch(`${BASE()}${path}?${qs}`, {
+      headers: { accept: 'application/json', 'user-agent': 'Mozilla/5.0' },
+      signal: ctrl.signal
+    })
+    if (!res.ok) {
+      console.error(`[yt] ${path} respondió ${res.status}`)
+      return null
+    }
+    const json = await res.json()
+    const d = json?.data || json?.result || null
+    if (!d) console.error(`[yt] ${path} sin data: ${JSON.stringify(json).slice(0, 200)}`)
+    return d
+  } catch (e) {
+    console.error(`[yt] ${path} falló: ${e.name === 'AbortError' ? `sin respuesta en ${API_TIMEOUT / 1000}s` : e.message}`)
+    return null
   } finally {
-    instalacionYtDlp = null
+    clearTimeout(t)
   }
 }
 
-function eliminarArchivosDescarga(id) {
+async function media(path, params) {
+  const d = await api(path, params)
+  if (!d) return null
+  if (Array.isArray(d)) {
+    console.error(`[yt] ${path} devolvió una lista, se esperaba un objeto: ${JSON.stringify(d).slice(0, 200)}`)
+    return null
+  }
+  const dl = d.dl || d.download || d.url || d.video || d.audio
+  if (!dl || typeof dl !== 'string') {
+    console.error(`[yt] ${path} sin link de descarga`)
+    return null
+  }
+  return {
+    dl,
+    title: d.title || d.name || 'sin título',
+    quality: d.quality || d.calidad || params.quality,
+    seconds: toSeconds(d.seconds ?? d.duration ?? d.timestamp ?? d.lengthSeconds)
+  }
+}
+
+export async function search(query, limit = 10) {
+  let timer
   try {
-    for (const nombre of fs.readdirSync(DOWNLOAD_DIR)) {
-      if (!nombre.startsWith(`${id}.`)) continue
-
-      const archivo = path.join(DOWNLOAD_DIR, nombre)
-
-      try {
-        const stat = fs.lstatSync(archivo)
-
-        if (stat.isSymbolicLink() || stat.isFile()) {
-          fs.unlinkSync(archivo)
-        } else if (stat.isDirectory()) {
-          fs.rmSync(archivo, {
-            recursive: true,
-            force: true,
-            maxRetries: 3,
-            retryDelay: 200
-          })
-        }
-      } catch {}
-    }
-  } catch {}
-}
-
-function desenvolverMensaje(msg) {
-  let mensaje = msg?.message
-
-  for (let i = 0; i < 8 && mensaje; i++) {
-    const envoltura =
-      mensaje.ephemeralMessage ||
-      mensaje.viewOnceMessage ||
-      mensaje.viewOnceMessageV2 ||
-      mensaje.viewOnceMessageV2Extension ||
-      mensaje.documentWithCaptionMessage ||
-      mensaje.deviceSentMessage
-
-    if (!envoltura?.message) break
-    mensaje = envoltura.message
+    const res = await Promise.race([
+      yts(query),
+      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('timeout')), SEARCH_TIMEOUT) })
+    ])
+    return (res.videos || []).slice(0, limit).map((v) => ({
+      title: v.title,
+      url: v.url,
+      seconds: v.seconds || 0,
+      author: v.author?.name || ''
+    }))
+  } catch (e) {
+    console.error(`[yt] búsqueda falló: ${e.message}`)
+    return []
+  } finally {
+    clearTimeout(timer)
   }
-
-  return mensaje || {}
 }
 
-function obtenerTexto(msg) {
-  const m = desenvolverMensaje(msg)
-
-  return (
-    m.conversation ||
-    m.extendedTextMessage?.text ||
-    m.imageMessage?.caption ||
-    m.videoMessage?.caption ||
-    m.documentMessage?.caption ||
-    ''
-  ).trim()
+async function toUrl(input) {
+  if (isYT(input)) return input
+  const [first] = await search(input, 1)
+  if (!first) console.error(`[yt] la búsqueda no devolvió videos para: ${input}`)
+  return first?.url || null
 }
 
-function obtenerContexto(msg) {
-  const m = desenvolverMensaje(msg)
-
-  return (
-    m.extendedTextMessage?.contextInfo ||
-    m.imageMessage?.contextInfo ||
-    m.videoMessage?.contextInfo ||
-    m.documentMessage?.contextInfo ||
-    null
-  )
+const fallbackOf = (q) => {
+  if (QUALITIES.indexOf(q) > QUALITIES.indexOf('480p')) return '480p'
+  if (q === '480p') return '360p'
+  return null
 }
 
-function obtenerChatId(msg) {
-  return msg?.key?.remoteJid || msg?.chat || ''
-}
-
-function normalizarJid(jid) {
-  return String(jid || '').split(':')[0].trim().toLowerCase()
-}
-
-function obtenerJidUsuario(msg, sock) {
-  const chatId = obtenerChatId(msg)
-
-  if (msg?.key?.fromMe) {
-    return normalizarJid(
-      sock?.user?.id ||
-      sock?.user?.jid ||
-      msg?.key?.participant ||
-      ''
-    )
+export async function resolveVideo(input, quality) {
+  const url = await toUrl(input)
+  if (!url) return null
+  const order = [quality]
+  const fb = fallbackOf(quality)
+  if (fb) order.push(fb)
+  for (const q of order) {
+    const data = await media(route('ytmp4'), { url, quality: q })
+    if (data) return { ...data, asked: quality, tried: q }
   }
-
-  if (chatId.endsWith('@g.us')) {
-    return normalizarJid(
-      msg?.key?.participant ||
-      msg?.participant ||
-      msg?.key?.participantAlt ||
-      ''
-    )
-  }
-
-  return normalizarJid(
-    msg?.key?.participant ||
-    msg?.participant ||
-    chatId
-  )
+  return null
 }
 
-function mismoUsuario(a, b) {
-  a = normalizarJid(a)
-  b = normalizarJid(b)
-
-  if (!a || !b) return false
-  if (a === b) return true
-
-  const tipoA = a.split('@')[1]
-  const tipoB = b.split('@')[1]
-
-  return (
-    tipoA === tipoB &&
-    ['s.whatsapp.net', 'lid'].includes(tipoA) &&
-    a.split('@')[0] === b.split('@')[0]
-  )
+export async function resolveAudio(input) {
+  const url = await toUrl(input)
+  if (!url) return null
+  return media(route('ytmp3'), { url })
 }
 
-function formatearDuracion(segundos = 0) {
-  segundos = Number(segundos) || 0
+export async function download(url, dest) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), DL_TIMEOUT)
+  try {
+    const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: ctrl.signal })
+    if (!res.ok) throw new Error(`Descarga ${res.status}`)
+    const len = Number(res.headers.get('content-length') || 0)
+    if (len && len > MAX_BYTES) throw tooBig()
 
-  const horas = Math.floor(segundos / 3600)
-  const minutos = Math.floor((segundos % 3600) / 60)
-  const segundosRestantes = Math.floor(segundos % 60)
-
-  return horas
-    ? `${horas}:${String(minutos).padStart(2, '0')}:${String(segundosRestantes).padStart(2, '0')}`
-    : `${minutos}:${String(segundosRestantes).padStart(2, '0')}`
-}
-
-function limpiarTexto(texto = '') {
-  return String(texto)
-    .replace(/[/:*?"<>|]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 150)
-}
-
-async function buscarVideo(texto) {
-  const resultado = await yts(texto)
-
-  if (!resultado.videos?.length) {
-    throw new Error('No se encontraron resultados.')
-  }
-
-  return resultado.videos[0]
-}
-
-function buscarArchivoDescargado(id, tipo) {
-  const extensionesPermitidas = tipo === 'audio'
-    ? ['.m4a', '.mp3', '.opus', '.webm', '.aac', '.wav']
-    : ['.mp4', '.mkv', '.webm', '.mov']
-
-  const archivos = fs.readdirSync(DOWNLOAD_DIR)
-
-  const candidatos = archivos
-    .filter(nombre => {
-      if (!nombre.startsWith(`${id}.`)) return false
-
-      const extension = path.extname(nombre).toLowerCase()
-
-      if (!extensionesPermitidas.includes(extension)) return false
-      if (/\.(part|ytdl|temp)$/i.test(nombre)) return false
-
-      return true
-    })
-    .map(nombre => {
-      const archivo = path.join(DOWNLOAD_DIR, nombre)
-
-      try {
-        const stat = fs.statSync(archivo)
-
-        return stat.isFile() && stat.size > 0
-          ? { archivo, nombre, tamano: stat.size }
-          : null
-      } catch {
-        return null
+    let bytes = 0
+    const limit = async function* (src) {
+      for await (const chunk of src) {
+        bytes += chunk.length
+        if (bytes > MAX_BYTES) throw tooBig()
+        yield chunk
       }
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.tamano - a.tamano)
-
-  return candidatos[0] || null
+    }
+    const body = typeof res.body.pipe === 'function' ? res.body : Readable.fromWeb(res.body)
+    await pipeline(body, limit, fs.createWriteStream(dest))
+  } finally {
+    clearTimeout(t)
+  }
 }
 
-async function descargarArchivo(url, tipo) {
-  const downloader = await cargarYtDlp()
-  let ultimoError
+let ffmpegOk
+const hasFfmpeg = () => ffmpegOk ??= new Promise((res) => {
+  try {
+    const c = spawn('ffmpeg', ['-version'], { stdio: 'ignore' })
+    c.on('error', () => res(false))
+    c.on('close', (code) => res(code === 0))
+  } catch {
+    res(false)
+  }
+})
 
-  for (let intento = 1; intento <= MAX_INTENTOS_DESCARGA; intento++) {
-    const id = `yt_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`
-
+function probe(file) {
+  return new Promise((resolve) => {
+    let out = ''
+    let child
     try {
-      fs.mkdirSync(DOWNLOAD_DIR, { recursive: true })
-      eliminarArchivosDescarga(id)
-
-      const plantilla = path.join(DOWNLOAD_DIR, `${id}.%(ext)s`)
-
-      const argumentos = [
-        '--ignore-config',
-        '--no-playlist',
-        '--no-warnings',
-        '--no-cache-dir',
-        '--no-part',
-        '--no-overwrites',
-        '--no-mtime',
-        '--retries', '5',
-        '--fragment-retries', '5',
-        '--extractor-retries', '3',
-        '--file-access-retries', '3',
-        '--retry-sleep', '2',
-        '--socket-timeout', '30',
-        '--js-runtimes', 'node',
-        '--remote-components', 'ejs:github',
-        '--output', plantilla
-      ]
-
-      if (fs.existsSync(COOKIES_PATH)) {
-        argumentos.push('--cookies', COOKIES_PATH)
-      }
-
-      if (tipo === 'audio') {
-        argumentos.push(
-          '-f', 'bestaudio[ext=m4a]/bestaudio',
-          '--extract-audio',
-          '--audio-format', 'm4a',
-          '--audio-quality', '0'
-        )
-      } else {
-        argumentos.push(
-          '-f', 'best[ext=mp4][height<=720]/best[height<=720]/best',
-          '--merge-output-format', 'mp4'
-        )
-      }
-
-      argumentos.push(url)
-
-      await downloader.execPromise(argumentos)
-
-      const resultado = buscarArchivoDescargado(id, tipo)
-
-      if (!resultado) {
-        throw new Error(
-          `yt-dlp terminó, pero no se encontró el archivo descargado en ${DOWNLOAD_DIR}.`
-        )
-      }
-
-      return {
-        ...resultado,
-        id
-      }
-    } catch (error) {
-      ultimoError = error
-      eliminarArchivosDescarga(id)
-
-      if (intento < MAX_INTENTOS_DESCARGA) {
-        await esperar(intento * 1500)
-      }
+      child = spawn('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,pix_fmt', '-of', 'json', file], { timeout: 15000, killSignal: 'SIGKILL' })
+    } catch {
+      return resolve(null)
     }
-  }
-
-  throw new Error(
-    `Falló la descarga después de ${MAX_INTENTOS_DESCARGA} intentos.\n${String(ultimoError?.message || ultimoError).slice(0, 900)}`
-  )
-}
-
-async function procesarRespuesta(sock, msg) {
-  const texto = obtenerTexto(msg).toLowerCase().trim()
-
-  if (!['a', 'v'].includes(texto)) return
-
-  const chatId = obtenerChatId(msg)
-  const contexto = obtenerContexto(msg)
-  const sentId = contexto?.stanzaId
-
-  if (!chatId || !sentId) return
-
-  const registro = REGISTROS.get(`${chatId}:${sentId}`)
-
-  if (!registro) return
-
-  if (!mismoUsuario(obtenerJidUsuario(msg, sock), registro.solicitante)) {
-    return
-  }
-
-  const tipo = texto === 'a' ? 'audio' : 'video'
-  const clave = `${chatId}:${sentId}:${tipo}`
-
-  if (DESCARGAS_ACTIVAS.has(clave)) return
-
-  DESCARGAS_ACTIVAS.add(clave)
-
-  let descarga
-
-  try {
-    await sock.sendMessage(chatId, {
-      react: { text: '🕒', key: msg.key }
-    })
-
-    descarga = await descargarArchivo(registro.url, tipo)
-
-    if (!fs.existsSync(descarga.archivo)) {
-      throw new Error('El archivo descargado ya no existe.')
-    }
-
-    const nombre = limpiarTexto(registro.titulo) || tipo
-    const extension = path.extname(descarga.nombre) || (tipo === 'audio' ? '.m4a' : '.mp4')
-    const comoDocumento = Number(registro.duracion) > 1200
-
-    if (tipo === 'audio') {
-      if (comoDocumento) {
-        await sock.sendMessage(chatId, {
-          document: { url: descarga.archivo },
-          mimetype: 'audio/mp4',
-          fileName: `${nombre}${extension}`,
-          caption: `➩ ${registro.titulo}`
-        }, { quoted: msg })
-      } else {
-        await sock.sendMessage(chatId, {
-          audio: { url: descarga.archivo },
-          mimetype: 'audio/mp4',
-          fileName: `${nombre}${extension}`,
-          ptt: false
-        }, { quoted: msg })
-      }
-    } else {
-      if (comoDocumento) {
-        await sock.sendMessage(chatId, {
-          document: { url: descarga.archivo },
-          mimetype: 'video/mp4',
-          fileName: `${nombre}${extension}`,
-          caption: `➩ ${registro.titulo}`
-        }, { quoted: msg })
-      } else {
-        await sock.sendMessage(chatId, {
-          video: { url: descarga.archivo },
-          mimetype: 'video/mp4',
-          fileName: `${nombre}${extension}`,
-          caption: `➩ ${registro.titulo}`
-        }, { quoted: msg })
-      }
-    }
-
-    await sock.sendMessage(chatId, {
-      react: { text: '✅', key: msg.key }
-    })
-  } catch (error) {
-    await sock.sendMessage(chatId, {
-      react: { text: '❌', key: msg.key }
-    }).catch(() => {})
-
-    await sock.sendMessage(chatId, {
-      text: `《✧》 No se pudo descargar o enviar el ${tipo}.\n\n> Error: ${String(error?.message || error).slice(0, 700)}`
-    }, { quoted: msg }).catch(() => {})
-  } finally {
-    if (descarga?.id) {
-      eliminarArchivosDescarga(descarga.id)
-    }
-
-    DESCARGAS_ACTIVAS.delete(clave)
-  }
-}
-
-function registrarEscucha(sock) {
-  if (!sock || SOCKETS_REGISTRADOS.has(sock)) return
-
-  SOCKETS_REGISTRADOS.add(sock)
-
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-    for (const msg of messages || []) {
-      if (!msg?.message) continue
-
+    child.stdout.on('data', (d) => { out += d })
+    child.on('error', () => resolve(null))
+    child.on('close', (code) => {
+      if (code !== 0) return resolve(null)
       try {
-        await procesarRespuesta(sock, msg)
-      } catch {}
-    }
+        const streams = JSON.parse(out).streams || []
+        const v = streams.find((s) => s.codec_type === 'video')
+        const a = streams.find((s) => s.codec_type === 'audio')
+        resolve({ v: v?.codec_name, pix: v?.pix_fmt, a: a?.codec_name })
+      } catch {
+        resolve(null)
+      }
+    })
   })
 }
 
-export default {
-  command: ['play', 'mp3', 'playaudio', 'ytaudio', 'play2', 'playvid'],
-  category: 'downloader',
-
-  async before({ sock }) {
-    if (sock) registrarEscucha(sock)
-  },
-
-  run: async ({ sock, msg, args, text }) => {
-    const chatId = obtenerChatId(msg)
-    const opciones = chatId.endsWith('@newsletter')
-      ? undefined
-      : { quoted: msg }
-
-    const consulta = (text || args?.join(' ') || '').trim()
-
+function runFfmpeg(args, output, timeout) {
+  return new Promise((resolve) => {
+    let err = ''
+    let child
     try {
-      registrarEscucha(sock)
-
-      if (!consulta) {
-        return sock.sendMessage(chatId, {
-          text: '《✧》 Escribe el nombre o la URL del video de YouTube.'
-        }, opciones)
-      }
-
-      await sock.sendMessage(chatId, {
-        react: { text: '🕒', key: msg.key }
-      })
-
-      const video = await buscarVideo(consulta)
-      const titulo = video.title || consulta
-      const url = video.url
-      const miniatura = video.thumbnail
-      const duracion = Number(video.seconds) || 0
-
-      let informacion = `➩ Descargando › ${titulo}\n\n`
-      informacion += `> ❖ Canal › *${video.author?.name || 'Desconocido'}*\n`
-      informacion += `> ⴵ Duración › *${video.timestamp || formatearDuracion(duracion)}*\n`
-      informacion += `> ❀ Vistas › *${Number(video.views || 0).toLocaleString()}*\n`
-      informacion += `> ❒ YouTube › *${url}*\n\n`
-      informacion += '*Responde a este mensaje con:*\n'
-      informacion += '> *a* para descargar audio\n'
-      informacion += '> *v* para descargar video'
-
-      let enviado
-
-      if (miniatura) {
-        try {
-          enviado = await sock.sendMessage(chatId, {
-            image: await getBuffer(miniatura),
-            caption: informacion
-          }, opciones)
-        } catch {
-          enviado = await sock.sendMessage(chatId, {
-            text: informacion
-          }, opciones)
-        }
-      } else {
-        enviado = await sock.sendMessage(chatId, {
-          text: informacion
-        }, opciones)
-      }
-
-      if (!enviado?.key?.id) {
-        throw new Error('No se pudo registrar el mensaje de selección.')
-      }
-
-      REGISTROS.set(`${chatId}:${enviado.key.id}`, {
-        url,
-        titulo,
-        duracion,
-        solicitante: obtenerJidUsuario(msg, sock)
-      })
-
-      if (REGISTROS.size > 500) {
-        const primeraClave = REGISTROS.keys().next().value
-        if (primeraClave) REGISTROS.delete(primeraClave)
-      }
-
-      setTimeout(() => {
-        REGISTROS.delete(`${chatId}:${enviado.key.id}`)
-      }, 900000).unref?.()
-
-      await sock.sendMessage(chatId, {
-        react: { text: '✅', key: msg.key }
-      })
-    } catch (error) {
-      await sock.sendMessage(chatId, {
-        react: { text: '❌', key: msg.key }
-      }).catch(() => {})
-
-      await sock.sendMessage(chatId, {
-        text: `《✧》 Error: ${String(error?.message || error).slice(0, 800)}`
-      }, opciones).catch(() => {})
+      child = spawn('ffmpeg', ['-y', '-v', 'error', ...args, output], { stdio: ['ignore', 'ignore', 'pipe'], timeout, killSignal: 'SIGKILL' })
+    } catch {
+      return resolve(false)
     }
-  }
+    try { os.setPriority(child.pid, 19) } catch {}
+    child.stderr.on('data', (d) => { if (err.length < 2000) err += d })
+    child.on('error', () => resolve(false))
+    child.on('close', (code) => {
+      const ok = code === 0 && fs.existsSync(output) && fs.statSync(output).size > 0
+      if (!ok) console.error(`[ffmpeg] falló (code ${code}): ${err.trim().slice(-300)}`)
+      resolve(ok)
+    })
+  })
+}
+
+export async function prepareVideo(input, output) {
+  if (!(await hasFfmpeg())) return false
+  const info = await probe(input)
+  const vOk = info?.v === 'h264' && info?.pix === 'yuv420p'
+  const aOk = !!info && (!info.a || info.a === 'aac')
+
+  const args = ['-i', input, '-map', '0:v:0', '-map', '0:a:0?']
+  if (vOk) args.push('-c:v', 'copy')
+  else args.push('-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28', '-pix_fmt', 'yuv420p')
+  if (aOk) args.push('-c:a', 'copy')
+  else args.push('-c:a', 'aac', '-b:a', '128k')
+  args.push('-movflags', '+faststart')
+
+  return runFfmpeg(args, output, vOk && aOk ? 2 * 60 * 1000 : 6 * 60 * 1000)
+}
+
+export async function prepareAudio(input, output) {
+  if (!(await hasFfmpeg())) return false
+  const info = await probe(input)
+  const args = ['-i', input, '-vn', '-map', '0:a:0']
+  if (info?.a === 'mp3') args.push('-c:a', 'copy')
+  else args.push('-c:a', 'libmp3lame', '-b:a', '128k')
+  return runFfmpeg(args, output, 4 * 60 * 1000)
 }
