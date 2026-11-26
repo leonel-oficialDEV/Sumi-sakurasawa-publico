@@ -205,7 +205,7 @@ function registrarEscucha(sock) {
 }
 
 // export default {
-  command: ['play', 'mp3', 'playaudio', 'ytaudio', 'ytmp3', 'yta', 'play2', 'playvid', 'ytmp4', 'mp4', 'ytv', 'ytdl'],
+//  command: ['play', 'mp3', 'playaudio', 'ytaudio', 'ytmp3', 'yta', 'play2', 'playvid', 'ytmp4', 'mp4', 'ytv', 'ytdl'],
   category: 'downloader',
   async before({ sock }) { if (sock) registrarEscucha(sock) },
   run: async ({ sock, msg, args, text, command }) => {
