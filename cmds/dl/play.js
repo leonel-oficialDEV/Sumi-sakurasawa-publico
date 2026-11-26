@@ -1,5 +1,3 @@
-/*
-
 import axios from 'axios'
 import yts from 'yt-search'
 import { getBuffer } from '#serialize'
@@ -206,7 +204,7 @@ function registrarEscucha(sock) {
   })
 }
 
-export default {
+// export default {
   command: ['play', 'mp3', 'playaudio', 'ytaudio', 'ytmp3', 'yta', 'play2', 'playvid', 'ytmp4', 'mp4', 'ytv', 'ytdl'],
   category: 'downloader',
   async before({ sock }) { if (sock) registrarEscucha(sock) },
@@ -295,5 +293,3 @@ export default {
   }
 }
 
-
-*/
