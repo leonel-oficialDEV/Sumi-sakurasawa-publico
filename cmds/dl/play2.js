@@ -1,3 +1,5 @@
+/*
+
 import yts from 'yt-search'
 import { getBuffer } from '#serialize'
 import fs from 'fs'
@@ -539,3 +541,5 @@ export default {
     }
   }
 }
+
+*/
