@@ -1,6 +1,6 @@
 import db from "#db"
 export default {
-  command: ['leave'],
+  command: ['leave','salir'],
   category: 'socket', 
   description: 'sacar al bot del grupo', 
   run: async ({ msg, sock, args }) => {
