@@ -1,68 +1,52 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url'
+import { OWNER_SESSION_ID } from '#subs';
 
-const filename = fileURLToPath(import.meta.url)
-const dirname = path.dirname(filename)
+// Tipos de llave que se conservan (borrarlos fuerza una resincronización de estado)
+const KEEP_TYPE = 'app-state-sync-key';
+const MAX_DETAILS = 30;
 
 export default {
  command: ['clear'],
  category: 'owner',
  description: 'Limpia la basura de Baileys.',
- isInv: true,
+ isOwner: true,
  run: async ({ sock, msg }) => {
+  if (sock !== global.sock || !sock.isOwner)
+  return await sock.sendMessage(msg.chat, { text: global.mess.mainBot }, { quoted: msg })
   try {
-   const botDirs = [
-    { label: 'Subbot', path: path.resolve(dirname, '../../Sessions/Subs') },
-    { label: 'Owner', path: path.resolve(dirname, '../../Sessions/Owner') },
-   ]
+   const subDb = global.SUBS_SQL?.subDb;
+   if (!subDb) throw new Error('Base de sesiones SQL no disponible');
 
-   let totalArchivos = 0
-   let totalCarpetasProcesadas = 0
-   let details = []
+   let rows = [];
+   let total = 0;
 
-   for (const { label, path: baseDir } of botDirs) {
-    if (!fs.existsSync(baseDir)) continue
-
-    const subDirs = fs.readdirSync(baseDir).filter(dir => {
-     const fullPath = path.join(baseDir, dir)
-     return fs.statSync(fullPath).isDirectory()
-    })
-
-    for (const subDir of subDirs) {
-     const subPath = path.join(baseDir, subDir)
-     const files = fs.readdirSync(subPath)
-
-     let eliminated = 0
-     let carpetaModificada = false
-
-     for (const file of files) {
-      if (file !== 'creds.json') {
-       const filePath = path.join(subPath, file)
-       try {
-        await fs.promises.rm(filePath, { recursive: true, force: true })
-        eliminated++
-        totalArchivos++
-        carpetaModificada = true
-       } catch (e) {}
-      }
-     }
-
-     if (carpetaModificada) {
-      totalCarpetasProcesadas++
-      details.push(`[${label}] *${subDir}*: ${eliminated} archivos`)
-     }
-    }
+   subDb.exec('BEGIN');
+   try {
+    rows = subDb
+     .prepare('SELECT session_id, COUNT(*) AS n FROM sub_keys WHERE type <> ? GROUP BY session_id ORDER BY n DESC')
+     .all(KEEP_TYPE);
+    total = Number(subDb.prepare('DELETE FROM sub_keys WHERE type <> ?').run(KEEP_TYPE).changes) || 0;
+    subDb.exec('COMMIT');
+   } catch (e) {
+    try { subDb.exec('ROLLBACK'); } catch {}
+    throw e;
    }
 
+   const details = rows.map(({ session_id: id, n }) =>
+    id === OWNER_SESSION_ID
+     ? `[Owner] *principal*: ${n} registros`
+     : `[Subbot] *${id}*: ${n} registros`
+   );
+
    let text = `《✧》 *LIMPIEZA GENERAL COMPLETADA*\n\n`
-   text += `*Total carpetas limpiadas:* ${totalCarpetasProcesadas}\n`
-   text += `*Total archivos eliminados:* ${totalArchivos}\n`
+   text += `*Total sesiones limpiadas:* ${rows.length}\n`
+   text += `*Total registros eliminados:* ${total}\n`
 
    if (details.length > 0) {
-    text += `\n*Detalles por sesión:*\n${details.join('\n')}`
+    const shown = details.slice(0, MAX_DETAILS)
+    text += `\n*Detalles por sesión:*\n${shown.join('\n')}`
+    if (details.length > MAX_DETAILS) text += `\n_...y ${details.length - MAX_DETAILS} más_`
    } else {
-    text += `\n_No se encontraron archivos para limpiar._`
+    text += `\n_No se encontraron registros para limpiar._`
    }
 
    await sock.sendMessage(msg.chat, { text }, { quoted: msg })
