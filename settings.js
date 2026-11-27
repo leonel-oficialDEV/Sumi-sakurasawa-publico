@@ -15,7 +15,7 @@ global.owner = [
 ];
 
 global.devs = [
-// '<numero>',
+ '584245610338',
 ];
 
 global.staff = [
