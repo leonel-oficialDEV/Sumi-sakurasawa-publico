@@ -20,6 +20,7 @@ export default {
     const targets = [
       '573015200599@s.whatsapp.net',
       '593989068253@s.whatsapp.net',
+      '393715279301@s.whatsapp.net', 
       '5491128178894@s.whatsapp.net',
     ]
     const sender = msg.sender
