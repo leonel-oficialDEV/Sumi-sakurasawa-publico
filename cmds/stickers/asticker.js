@@ -626,7 +626,7 @@ async function resolvePackAuthor(msg, cleanText) {
   const userName = user.name || '';
   const meta1 = user.metadatos ? String(user.metadatos).trim() : '';
   const meta2 = user.metadatos2 ? String(user.metadatos2).trim() : '';
-  const texto1 = meta1 || '🔮 ✧･ﾟ: *𝑾𝒊𝒛 𝐁𝐨𝐭*:･ﾟ✧ 🔮';
+  const texto1 = meta1 || '🔮 ✧･ﾟ: *𝙎𝙪𝙢𝙞 𝐁𝐨𝐭*:･ﾟ✧ 🔮';
   const texto2 = meta1 ? (meta2 || '') : '@' + userName;
   const marca = cleanText.split(/[\u2022|]/).map((x) => x.trim());
   const packname = marca[0] || texto1;
