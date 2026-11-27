@@ -1,6 +1,6 @@
 import { forwardAudioSticker, loadAudioSticker } from '../stickers/asticker.js'
 
-const CHANNEL_JID = '120363429087298544@newsletter'
+const CHANNEL_JID = '120363324350463849@newsletter'
 
 function isAnimatedWebp(buffer) {
   return buffer.includes(Buffer.from('ANIM')) || buffer.includes(Buffer.from('ANMF'))
